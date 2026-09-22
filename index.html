@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<!--
+  현장체험학습 미션 랠리 (학생 앱 + 교사 현황판)
+  © 2026 영쌤클래스 · 교육용으로 제작 · 무단 복제·재배포 금지
+  백엔드: Google Apps Script (Code.gs) + 구글 스프레드시트 + 드라이브
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="copyright" content="© 2026 영쌤클래스 · 교육용으로 제작 · 무단 복제·재배포 금지">
+<title>미션 랠리</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --paper: #FFF8E7;
+    --paper-2: #FBEFD2;
+    --ink: #22261F;
+    --ink-2: #5C6156;
+    --forest: #1E5A3A;
+    --leaf: #5FB56B;
+    --sun: #FFC533;
+    --coral: #E4623F;
+    --line: #D9CDB0;
+    --radius: 18px;
+    --sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    --display: "Jua", var(--sans);
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 17px; line-height: 1.5;
+    min-height: 100%;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  .app { max-width: 720px; margin: 0 auto; padding: 16px 16px 80px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 400; letter-spacing: -0.01em; margin: 0; }
+
+  /* ── 공통 부품 ── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 52px; padding: 0 22px; border-radius: 14px; border: 0;
+    background: var(--forest); color: #fff; font-family: var(--display); font-size: 20px;
+  }
+  .btn.sun { background: var(--sun); color: var(--ink); }
+  .btn.ghost { background: transparent; color: var(--forest); border: 2px solid var(--forest); }
+  .btn.small { min-height: 40px; padding: 0 14px; font-size: 16px; border-radius: 10px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.block { width: 100%; }
+  .field { display: block; margin: 14px 0; }
+  .field span { display: block; font-size: 15px; color: var(--ink-2); margin-bottom: 6px; }
+  .field input, .field select, .field textarea {
+    width: 100%; min-height: 54px; padding: 12px 14px; border-radius: 12px;
+    border: 2px solid var(--line); background: #fff; font-size: 19px;
+  }
+  .field textarea { min-height: 130px; resize: vertical; line-height: 1.5; }
+  .field input.pin { font-size: 30px; letter-spacing: .4em; text-align: center; font-family: var(--display); }
+  .msg { padding: 12px 14px; border-radius: 12px; background: var(--paper-2); font-size: 16px; margin: 10px 0; }
+  .msg.err { background: #FBE3DB; color: #8A2E17; }
+  .msg.ok { background: #DDF3E0; color: #17502A; }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 999px; font-size: 16px;
+    max-width: 90vw; z-index: 60; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .foot { text-align: center; font-size: 12px; color: var(--ink-2); margin-top: 40px; }
+  .foot button { background: none; border: 0; color: var(--ink-2); text-decoration: underline; font-size: 12px; padding: 4px; }
+
+  /* ── 로그인 ── */
+  .hero { padding: 24px 0 8px; }
+  .hero .kicker { font-size: 16px; color: var(--forest); margin: 0 0 4px; }
+  .hero h1 { font-size: 40px; line-height: 1.1; color: var(--forest); }
+  .hero p.notice { margin: 12px 0 0; color: var(--ink-2); }
+  .ticket {
+    margin-top: 20px; background: #fff; border: 2px dashed var(--line); border-radius: var(--radius); padding: 18px;
+  }
+
+  /* ── 홈 ── */
+  .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 8px 0 14px; }
+  .topbar .team { font-family: var(--display); font-size: 30px; color: var(--forest); line-height: 1; }
+  .topbar .sub { font-size: 14px; color: var(--ink-2); margin-top: 6px; }
+  .score { text-align: right; }
+  .score b { display: block; font-family: var(--display); font-size: 42px; line-height: 1; color: var(--ink); }
+  .score b small { font-size: 18px; margin-left: 2px; }
+  .score span { font-size: 14px; color: var(--ink-2); }
+  .trail { position: relative; height: 14px; border-radius: 999px; background: var(--paper-2); overflow: hidden; margin: 4px 0 22px; }
+  .trail i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--leaf); border-radius: 999px; transition: width .5s ease; }
+
+  .stamps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (min-width: 560px) { .stamps { grid-template-columns: repeat(3, 1fr); } }
+  .stamp {
+    position: relative; text-align: left; background: #fff; border: 2px solid var(--line); border-radius: var(--radius);
+    padding: 14px 14px 12px; min-height: 140px; display: flex; flex-direction: column; gap: 6px; overflow: hidden;
+  }
+  .stamp .no { font-family: var(--display); font-size: 15px; color: var(--ink-2); }
+  .stamp .title { font-family: var(--display); font-size: 20px; line-height: 1.2; color: var(--ink); }
+  .stamp .place { font-size: 13px; color: var(--ink-2); margin-top: auto; }
+  .stamp .pts { position: absolute; top: 10px; right: 12px; font-family: var(--display); font-size: 14px; color: var(--forest); }
+  .stamp.done { border-color: var(--leaf); background: #F4FBF4; }
+  .stamp.pending { border-color: var(--sun); background: #FFF9E0; }
+  .stamp.wrong { border-color: var(--coral); }
+  .seal {
+    position: absolute; right: 8px; bottom: 8px; width: 64px; height: 64px; border-radius: 50%;
+    border: 3px solid var(--leaf); color: var(--leaf); display: grid; place-items: center;
+    font-family: var(--display); font-size: 18px; transform: rotate(-14deg); opacity: .9;
+    box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px var(--leaf);
+  }
+  .seal.wait { border-color: var(--sun); color: #8A6A00; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px var(--sun); }
+  .seal.press { animation: press .45s cubic-bezier(.2,1.4,.5,1); }
+  @keyframes press { 0% { transform: rotate(-14deg) scale(2.2); opacity: 0; } 60% { transform: rotate(-14deg) scale(.9); opacity: 1; } 100% { transform: rotate(-14deg) scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .seal.press { animation: none; } .trail i { transition: none; } }
+
+  .board { margin-top: 28px; background: #fff; border: 2px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .board h2 { font-size: 22px; color: var(--forest); margin-bottom: 6px; }
+  .board ol { margin: 0; padding: 0; list-style: none; }
+  .board li { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--paper-2); }
+  .board li.me { font-weight: 700; color: var(--forest); }
+  .board li:first-child { border-top: 0; }
+
+  /* ── 미션 시트(모달) ── */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(34,38,31,.5); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+  .sheet {
+    background: var(--paper); width: 100%; max-width: 720px; max-height: 92vh; overflow: auto;
+    border-radius: 22px 22px 0 0; padding: 18px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 720px) { .sheet-bg { align-items: center; } .sheet { border-radius: 22px; } }
+  .sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .sheet-head h2 { font-size: 28px; line-height: 1.15; color: var(--forest); }
+  .sheet-head .close { background: none; border: 0; font-size: 28px; line-height: 1; padding: 4px 8px; color: var(--ink-2); }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 15px; color: var(--ink-2); margin: 6px 0 14px; }
+  .desc { font-size: 18px; line-height: 1.6; background: #fff; border-radius: 12px; padding: 12px 14px; border: 2px solid var(--line); }
+  .hint { font-size: 15px; color: var(--ink-2); margin-top: 8px; }
+  .choices { display: grid; gap: 10px; margin: 14px 0; }
+  .choice { min-height: 54px; text-align: left; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--line); background: #fff; font-size: 19px; }
+  .choice.on { border-color: var(--forest); background: #E8F4EC; }
+  .photo-box { margin: 14px 0; }
+  .photo-box img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; background: #fff; border: 2px solid var(--line); }
+  .photo-box label.btn { width: 100%; }
+  .photo-box input { display: none; }
+  .actions { display: grid; gap: 10px; margin-top: 16px; }
+
+  /* ── 교사 현황판 ── */
+  .tbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 16px; }
+  .tbar h1 { font-size: 26px; color: var(--forest); margin-right: auto; }
+  .live { font-size: 13px; color: var(--ink-2); }
+  .grid-wrap { overflow-x: auto; border: 2px solid var(--line); border-radius: var(--radius); background: #fff; }
+  table.grid { border-collapse: collapse; min-width: 100%; font-size: 14px; }
+  table.grid th, table.grid td { border-bottom: 1px solid var(--paper-2); padding: 8px 10px; text-align: center; white-space: nowrap; }
+  table.grid th { font-family: var(--display); font-weight: 400; color: var(--forest); font-size: 15px; background: var(--paper-2); position: sticky; top: 0; }
+  table.grid th:first-child, table.grid td:first-child { text-align: left; position: sticky; left: 0; background: #fff; }
+  table.grid th:first-child { background: var(--paper-2); }
+  table.grid td.total { font-family: var(--display); font-size: 17px; }
+  .cell { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-family: var(--display); font-size: 14px; border: 0; background: var(--paper-2); color: var(--ink-2); }
+  .cell.done { background: var(--leaf); color: #fff; }
+  .cell.pending { background: var(--sun); color: var(--ink); }
+  .cell.wrong { background: #FBE3DB; color: var(--coral); }
+  .queue { margin-top: 24px; }
+  .queue h2 { font-size: 22px; color: var(--forest); margin-bottom: 10px; }
+  .card { background: #fff; border: 2px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .card.pend { border-color: var(--sun); }
+  .card .who { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .card .who b { font-family: var(--display); font-size: 20px; font-weight: 400; color: var(--forest); }
+  .card .who span { font-size: 13px; color: var(--ink-2); }
+  .card .ans { margin: 8px 0; white-space: pre-wrap; font-size: 16px; }
+  .card img { width: 100%; max-height: 360px; object-fit: contain; border-radius: 12px; background: var(--paper-2); margin: 8px 0; }
+  .card .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .card .row input { width: 84px; min-height: 40px; border-radius: 10px; border: 2px solid var(--line); padding: 0 10px; text-align: center; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--paper-2); color: var(--ink-2); }
+  .tag.done { background: #DDF3E0; color: #17502A; } .tag.pending { background: #FFF1BF; color: #6B5200; } .tag.wrong { background: #FBE3DB; color: #8A2E17; }
+
+  /* ── QR 인쇄 ── */
+  .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .qr-card { border: 2px solid var(--ink); border-radius: 14px; padding: 16px; text-align: center; page-break-inside: avoid; background: #fff; }
+  .qr-card h3 { font-size: 24px; margin-bottom: 4px; }
+  .qr-card .place { color: var(--ink-2); font-size: 15px; }
+  .qr-card .qr { display: grid; place-items: center; margin: 12px auto; }
+  .qr-card .code { font-family: var(--display); font-size: 34px; letter-spacing: .15em; }
+  .qr-card .how { font-size: 13px; color: var(--ink-2); }
+  @media print {
+    body { background: #fff; } .app { padding: 0; max-width: none; }
+    .no-print, .toast, .foot { display: none !important; }
+    .print-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   설정 — 영쌤이 배포한 공용 Apps Script 웹 앱 URL (한 번만 설정)
+   ============================================================ */
+const CONFIG = {
+  API: 'https://script.google.com/macros/s/AKfycbzDxJ3w3pht02tR9iZO9Dyk9epf6pb2W0Ft_nikzuuO6ZWpLCivAavthj5S9_wHAoRqPA/exec',
+  STUDENT_POLL: 15000,   // 학생 앱 새로고침 간격(ms)
+  TEACHER_POLL: 8000,    // 교사 현황판 새로고침 간격(ms)
+  PHOTO_MAX: 1024,       // 사진 긴 변 최대 픽셀
+};
+const COPYRIGHT = '© 2026 영쌤클래스 · 교육용으로 제작 · 무단 복제·재배포 금지';
+
+/* ───────── 상태 ───────── */
+const store = {
+  get: k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+  del: k => { try { localStorage.removeItem(k); } catch {} },
+  sget: k => { try { return sessionStorage.getItem(k) || ''; } catch { return ''; } },
+  sset: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} },
+  sdel: k => { try { sessionStorage.removeItem(k); } catch {} },
+};
+const S = {
+  boot: null,             // {title, notice, missions, teams}
+  event: '',              // 행사 코드
+  team: store.get('rally.team'),
+  pin: store.get('rally.pin'),
+  mine: [],               // 내 모둠 제출 내역
+  board: [],              // 순위표
+  view: 'loading',
+  open: null,             // 열려 있는 미션 id
+  teacherPw: '',
+  tdata: null,
+  timers: {},
+  pressed: null,          // 방금 도장 찍힌 미션 (애니메이션용)
+};
+const $ = sel => document.querySelector(sel);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const app = $('#app');
+
+/* ───────── 서버 통신 ───────── */
+function resolveEvent() {
+  const p = (new URL(location.href).searchParams.get('e') || '').trim().toUpperCase();
+  if (p) {
+    if (p !== store.get('rally.event')) { store.del('rally.team'); store.del('rally.pin'); S.team = ''; S.pin = ''; }
+    store.set('rally.event', p); return p;
+  }
+  return store.get('rally.event');
+}
+function appLink(extra = '') {
+  const base = location.origin + location.pathname;
+  const q = new URLSearchParams(); if (S.event) q.set('e', S.event);
+  const qs = q.toString();
+  return base + (qs || extra ? '?' + qs + (qs && extra ? '&' : '') + extra : '');
+}
+async function api(payload) {
+  if (payload.action !== 'auth_url' && !payload.event) payload.event = S.event;
+  const res = await fetch(CONFIG.API, { method: 'POST', body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!data.ok && data.error && !data.reason) throw new Error(data.error);
+  return data;
+}
+function toast(text, ms = 2200) {
+  const t = $('#toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(S.timers.toast); S.timers.toast = setTimeout(() => t.classList.remove('show'), ms);
+}
+function stopPolling() { clearInterval(S.timers.student); clearInterval(S.timers.teacher); }
+
+/* ───────── 헬퍼 ───────── */
+function missionStatus(id) {
+  const subs = S.mine.filter(s => s.missionId === id);
+  if (subs.some(s => s.status === '완료' || s.status === '승인')) return 'done';
+  if (subs.some(s => s.status === '검토중')) return 'pending';
+  if (subs.some(s => s.status === '오답' || s.status === '반려')) return 'wrong';
+  return 'todo';
+}
+function myPoints() { return S.mine.filter(s => s.status === '완료' || s.status === '승인').reduce((a, s) => a + (s.points || 0), 0); }
+function lastNote(id) { const s = S.mine.filter(x => x.missionId === id).slice(-1)[0]; return s ? s.note : ''; }
+const TYPE_LABEL = { '장소인증': '장소 도착', '사진': '사진 미션', '퀴즈': '퀴즈', '기록': '관찰 기록' };
+const STATUS_CLASS = { '완료': 'done', '승인': 'done', '검토중': 'pending', '오답': 'wrong', '반려': 'wrong' };
+function fmtTime(iso) { const d = new Date(iso); return isNaN(d) ? '' : `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; }
+
+/* ───────── 화면: 로딩/오류 ───────── */
+function renderLoading(text = '불러오는 중…') {
+  app.innerHTML = `<div class="hero"><p class="kicker">현장체험학습</p><h1>미션 랠리</h1><p class="notice">${esc(text)}</p></div>`;
+}
+function renderFatal(err) {
+  app.innerHTML = `<div class="hero"><p class="kicker">현장체험학습</p><h1>미션 랠리</h1></div>
+    <div class="msg err">${esc(err.message || err)}</div>
+    <p class="live">행사 코드: ${esc(S.event || '(없음)')}</p>
+    <button class="btn block" onclick="boot()">다시 시도</button>
+    <p class="foot"><button onclick="leaveEvent()">다른 행사 코드 입력</button></p>${footer()}`;
+}
+function footer() {
+  return `<p class="foot">${esc(COPYRIGHT)}<br><button onclick="goTeacher()">교사용 현황판</button> · <button onclick="leaveEvent()">다른 행사</button></p>`;
+}
+function leaveEvent() {
+  stopPolling(); S.event = ''; S.team = ''; S.pin = ''; S.boot = null; S.mine = [];
+  store.del('rally.event'); store.del('rally.team'); store.del('rally.pin');
+  history.replaceState(null, '', location.pathname); renderStart();
+}
+
+/* ───────── 화면: 시작(행사 코드 / 선생님 시작) ───────── */
+function renderStart(err = '') {
+  S.view = 'start';
+  app.innerHTML = `
+    <div class="hero"><p class="kicker">현장체험학습</p><h1>미션 랠리</h1>
+      <p class="notice">선생님이 준 링크나 QR로 들어오면 바로 시작돼요. 행사 코드만 있다면 아래에 입력하세요.</p></div>
+    <div class="ticket">
+      <label class="field"><span>행사 코드</span><input id="ev" class="pin" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABCD"></label>
+      ${err ? `<div class="msg err">${esc(err)}</div>` : ''}
+      <button class="btn sun block" id="evBtn">입장하기</button>
+    </div>
+    <div class="ticket" style="margin-top:14px">
+      <h2 style="font-size:22px;color:var(--forest)">선생님이신가요?</h2>
+      <p style="margin:6px 0 10px;color:var(--ink-2);font-size:15px">Google 계정으로 로그인하면 <b>선생님 드라이브</b>에 미션 시트와 사진 폴더가 만들어지고 행사 코드가 나와요. 기록은 모두 선생님 계정에 저장됩니다.</p>
+      <label class="field"><span>행사 이름 (예: 2026 가을 순천만 체험학습)</span><input id="evTitle" maxlength="60" placeholder="행사 이름"></label>
+      <button class="btn block" id="gBtn">Google로 시작하기</button>
+      <p style="margin:12px 0 0;font-size:14px;color:var(--ink-2)">이미 행사 코드가 있다면 위에 코드를 넣고 입장한 뒤 화면 아래 "교사용 현황판"으로 가세요.</p>
+    </div>
+    <p class="foot">${esc(COPYRIGHT)}</p>`;
+  $('#evBtn').onclick = () => {
+    const v = $('#ev').value.trim().toUpperCase();
+    if (!v) return renderStart('행사 코드를 입력하세요');
+    S.event = v; store.set('rally.event', v); boot();
+  };
+  $('#ev').addEventListener('keydown', e => { if (e.key === 'Enter') $('#evBtn').click(); });
+  $('#gBtn').onclick = startGoogle;
+}
+async function startGoogle() {
+  const btn = $('#gBtn'); btn.disabled = true; btn.textContent = '준비 중…';
+  try {
+    const r = await api({ action: 'auth_url', appUrl: location.origin + location.pathname, title: $('#evTitle').value.trim() });
+    location.href = r.url;
+  } catch (e) { btn.disabled = false; btn.textContent = 'Google로 시작하기'; toast(e.message); }
+}
+
+/* ───────── 화면: 로그인 ───────── */
+function renderLogin(err = '') {
+  const b = S.boot;
+  const url = new URL(location.href);
+  const code = url.searchParams.get('code');
+  app.innerHTML = `
+    <div class="hero">
+      <p class="kicker">현장체험학습 · 행사 코드 ${esc(S.event)}</p>
+      <h1>${esc(b.title)}</h1>
+      ${b.notice ? `<p class="notice">${esc(b.notice)}</p>` : ''}
+    </div>
+    <div class="ticket">
+      <label class="field"><span>우리 모둠</span>
+        <select id="team">${b.teams.map(t => `<option ${t === S.team ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+      <label class="field"><span>모둠 PIN (선생님이 알려준 숫자)</span>
+        <input id="pin" class="pin" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••"></label>
+      ${err ? `<div class="msg err">${esc(err)}</div>` : ''}
+      ${code ? `<div class="msg">장소 QR을 찍었네요! 로그인하면 바로 이어져요.</div>` : ''}
+      <button class="btn sun block" id="loginBtn">출발하기</button>
+    </div>${footer()}`;
+  $('#loginBtn').onclick = login;
+  $('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+}
+async function login() {
+  const team = $('#team').value, pin = $('#pin').value.trim();
+  if (!pin) return renderLogin('PIN을 입력하세요');
+  const btn = $('#loginBtn'); btn.disabled = true; btn.textContent = '확인 중…';
+  try {
+    await api({ action: 'login', team, pin });
+    S.team = team; S.pin = pin;
+    store.set('rally.team', team); store.set('rally.pin', pin);
+    await refreshStudent(true);
+  } catch (e) { renderLogin(e.message); }
+}
+function logout() {
+  if (!confirm('모둠을 바꿀까요? (기록은 서버에 남아 있어요)')) return;
+  stopPolling(); S.team = ''; S.pin = ''; S.mine = [];
+  store.del('rally.team'); store.del('rally.pin');
+  renderLogin();
+}
+
+/* ───────── 화면: 홈(스탬프판) ───────── */
+async function refreshStudent(first = false) {
+  try {
+    const d = await api({ action: 'state', team: S.team, pin: S.pin });
+    S.mine = d.mine; S.board = d.leaderboard;
+    if (first) {
+      const code = new URL(location.href).searchParams.get('code');
+      if (code) { S.codeFromQR = code; history.replaceState(null, '', location.pathname); }
+    }
+    if (first || S.view !== 'home' || !S.open) renderHome();
+    if (first) {
+      clearInterval(S.timers.student);
+      S.timers.student = setInterval(() => refreshStudent(false), CONFIG.STUDENT_POLL);
+    }
+  } catch (e) {
+    if (/PIN|모둠/.test(e.message)) { S.team = ''; store.del('rally.team'); renderLogin(e.message); }
+    else if (first) renderFatal(e); else toast('연결이 잠시 끊겼어요. 다시 시도 중…');
+  }
+}
+function renderHome() {
+  S.view = 'home';
+  const ms = S.boot.missions;
+  const done = ms.filter(m => missionStatus(m.id) === 'done').length;
+  const pct = ms.length ? Math.round(done / ms.length * 100) : 0;
+  app.innerHTML = `
+    <div class="topbar">
+      <div><div class="team">${esc(S.team)}</div><div class="sub">${done} / ${ms.length} 미션 완료 · ${esc(S.boot.title)}</div></div>
+      <div class="score"><b>${myPoints()}<small>점</small></b><span>우리 모둠 점수</span></div>
+    </div>
+    <div class="trail" aria-label="진행률 ${pct}%"><i style="width:${pct}%"></i></div>
+    <div class="stamps">
+      ${ms.map((m, i) => {
+        const st = missionStatus(m.id);
+        const seal = st === 'done' ? `<div class="seal ${S.pressed === m.id ? 'press' : ''}">완료</div>`
+                   : st === 'pending' ? `<div class="seal wait">검토중</div>` : '';
+        return `<button class="stamp ${st}" onclick="openMission('${esc(m.id)}')">
+          <span class="no">${i + 1}</span><span class="pts">${m.points}점</span>
+          <span class="title">${esc(m.title)}</span>
+          <span class="place">${esc(TYPE_LABEL[m.type] || m.type)}${m.place ? ' · ' + esc(m.place) : ''}</span>${seal}</button>`;
+      }).join('')}
+    </div>
+    <div class="board"><h2>모둠 순위</h2><ol>
+      ${S.board.map((r, i) => `<li class="${r.team === S.team ? 'me' : ''}"><span>${i + 1}. ${esc(r.team)}</span><span>${r.points}점 · ${r.done}개</span></li>`).join('')}
+    </ol></div>
+    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="logout()">모둠 바꾸기</button> · <button onclick="goTeacher()">교사용</button></p>`;
+  S.pressed = null;
+  // QR로 들어온 경우: 해당 코드가 필요한 첫 미완료 미션 자동 열기
+  if (S.codeFromQR) {
+    const target = ms.find(m => m.needCode && missionStatus(m.id) !== 'done');
+    if (target) openMission(target.id, S.codeFromQR);
+    S.codeFromQR = null;
+  }
+}
+
+/* ───────── 화면: 미션 시트 ───────── */
+let draft = { answer: '', choice: '', photo: '', code: '' };
+function openMission(id, prefillCode = '') {
+  const m = S.boot.missions.find(x => x.id === id); if (!m) return;
+  S.open = id; draft = { answer: '', choice: '', photo: '', code: prefillCode };
+  renderSheet(m);
+}
+function closeMission() { S.open = null; const bg = $('#sheet'); if (bg) bg.remove(); }
+function renderSheet(m, err = '') {
+  const st = missionStatus(m.id);
+  const locked = st === 'done' || st === 'pending';
+  const last = S.mine.filter(s => s.missionId === m.id).slice(-1)[0];
+  let body = '';
+  if (locked) {
+    body = st === 'done'
+      ? `<div class="msg ok">완료한 미션이에요. ${last?.points ? `+${last.points}점` : ''}</div>`
+      : `<div class="msg">선생님이 확인 중이에요. 잠시 뒤 도장이 찍혀요.</div>`;
+    if (last?.photo) body += `<div class="photo-box"><img src="${esc(last.photo)}" alt="제출한 사진"></div>`;
+    if (last?.answer && m.type !== '장소인증') body += `<div class="desc">${esc(last.answer)}</div>`;
+  } else {
+    if (st === 'wrong' && last) body += `<div class="msg err">${last.status === '반려' ? '다시 해 보세요.' : '아쉽지만 정답이 아니에요. 다시 도전!'}${last.note ? ' — ' + esc(last.note) : ''}</div>`;
+    if (m.needCode) body += `<label class="field"><span>장소 코드 (안내판 QR 또는 숫자)</span><input id="code" class="pin" inputmode="numeric" maxlength="8" value="${esc(draft.code)}" placeholder="0000"></label>`;
+    if (m.type === '퀴즈') {
+      body += m.freeText
+        ? `<label class="field"><span>답</span><input id="answer" value="${esc(draft.answer)}" placeholder="답을 쓰세요"></label>`
+        : `<div class="choices">${m.choices.map(c => `<button class="choice ${draft.choice === c ? 'on' : ''}" onclick="pick('${esc(c)}')">${esc(c)}</button>`).join('')}</div>`;
+    }
+    if (m.type === '기록') body += `<label class="field"><span>관찰한 내용</span><textarea id="answer" placeholder="본 것, 들은 것, 느낀 것을 적어요">${esc(draft.answer)}</textarea></label>`;
+    if (m.type === '사진') body += `<div class="photo-box">
+        ${draft.photo ? `<img src="${draft.photo}" alt="찍은 사진">` : ''}
+        <label class="btn ghost">${draft.photo ? '다시 찍기' : '📷 사진 찍기'}<input type="file" accept="image/*" capture="environment" onchange="onPhoto(this)"></label>
+        <label class="field"><span>한 줄 설명 (선택)</span><input id="answer" value="${esc(draft.answer)}" placeholder="어디에서 무엇을 찍었나요?"></label></div>`;
+    if (err) body += `<div class="msg err">${esc(err)}</div>`;
+    body += `<div class="actions"><button class="btn sun block" id="submitBtn" onclick="submitMission('${esc(m.id)}')">${m.type === '장소인증' ? '도착 도장 찍기' : '제출하기'}</button></div>`;
+  }
+  const html = `<div class="sheet-bg" id="sheet" onclick="if(event.target===this)closeMission()"><div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-head"><h2>${esc(m.title)}</h2><button class="close" aria-label="닫기" onclick="closeMission()">×</button></div>
+    <div class="meta"><span>${esc(TYPE_LABEL[m.type] || m.type)}</span>${m.place ? `<span>📍 ${esc(m.place)}</span>` : ''}<span>${m.points}점</span></div>
+    <div class="desc">${esc(m.desc)}</div>${m.hint ? `<p class="hint">힌트: ${esc(m.hint)}</p>` : ''}
+    ${body}</div></div>`;
+  const old = $('#sheet'); if (old) old.remove();
+  app.insertAdjacentHTML('beforeend', html);
+}
+function pick(c) { draft.choice = c; document.querySelectorAll('.choice').forEach(b => b.classList.toggle('on', b.textContent === c)); }
+function grabDraft() {
+  const a = $('#answer'); if (a) draft.answer = a.value;
+  const c = $('#code'); if (c) draft.code = c.value;
+}
+function onPhoto(input) {
+  const file = input.files && input.files[0]; if (!file) return;
+  grabDraft();
+  const img = new Image(); const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const scale = Math.min(1, CONFIG.PHOTO_MAX / Math.max(img.width, img.height));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    draft.photo = cv.toDataURL('image/jpeg', 0.8);
+    URL.revokeObjectURL(url);
+    renderSheet(S.boot.missions.find(x => x.id === S.open));
+  };
+  img.src = url;
+}
+async function submitMission(id) {
+  const m = S.boot.missions.find(x => x.id === id);
+  grabDraft();
+  const payload = { action: 'submit', team: S.team, pin: S.pin, missionId: id, code: draft.code };
+  if (m.type === '퀴즈') payload.answer = m.freeText ? draft.answer : draft.choice;
+  if (m.type === '기록' || m.type === '사진') payload.answer = draft.answer;
+  if (m.type === '사진') { if (!draft.photo) return renderSheet(m, '먼저 사진을 찍어 주세요'); payload.photo = draft.photo; payload.photoType = 'image/jpeg'; }
+  if (m.type === '퀴즈' && !payload.answer) return renderSheet(m, '답을 고르거나 써 주세요');
+  if (m.needCode && !draft.code) return renderSheet(m, '장소 코드를 입력하세요');
+  const btn = $('#submitBtn'); btn.disabled = true; btn.textContent = '보내는 중…';
+  try {
+    const r = await api(payload);
+    if (!r.ok) return renderSheet(m, r.error);
+    if (r.status === '완료') { toast(`도장 쾅! +${r.points}점`); S.pressed = id; }
+    else if (r.status === '검토중') toast('제출했어요. 선생님이 확인하면 도장이 찍혀요.');
+    else if (r.status === '오답') toast('정답이 아니에요. 다시 도전!');
+    closeMission();
+    S.mine.push({ missionId: id, status: r.status, points: r.points || 0, answer: payload.answer || '', photo: r.photo || '', time: new Date().toISOString(), note: '' });
+    renderHome();
+    refreshStudent(false);
+  } catch (e) { renderSheet(m, e.message); }
+}
+
+/* ───────── 교사 현황판 ───────── */
+function goTeacher() {
+  if (!S.event) return renderStart();
+  stopPolling(); S.view = 'teacher';
+  S.teacherPw = S.teacherPw || store.sget('rally.pw.' + S.event);
+  S.teacherPw ? refreshTeacher(true) : renderTeacherLogin();
+}
+function renderTeacherLogin(err = '') {
+  app.innerHTML = `<div class="hero"><p class="kicker">교사용 · 행사 코드 ${esc(S.event)}</p><h1>미션 현황판</h1></div>
+    <div class="ticket"><label class="field"><span>교사 비밀번호 (내 시트의 '설정' 탭)</span><input id="pw" type="password" autocomplete="off"></label>
+    ${err ? `<div class="msg err">${esc(err)}</div>` : ''}
+    <button class="btn block" id="pwBtn">들어가기</button></div>
+    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="backToStudent()">학생 화면으로</button></p>`;
+  $('#pwBtn').onclick = () => { S.teacherPw = $('#pw').value; refreshTeacher(true); };
+  $('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#pwBtn').click(); });
+}
+function backToStudent() { stopPolling(); S.view = 'home'; S.team ? refreshStudent(true) : renderLogin(); }
+async function refreshTeacher(first = false) {
+  try {
+    const d = await api({ action: 'teacher', pw: S.teacherPw });
+    store.sset('rally.pw.' + S.event, S.teacherPw);
+    S.tdata = d;
+    if (S.view === 'teacher') renderTeacher();
+    if (first) { clearInterval(S.timers.teacher); S.timers.teacher = setInterval(() => refreshTeacher(false), CONFIG.TEACHER_POLL); }
+  } catch (e) {
+    if (first) { S.teacherPw = ''; store.sdel('rally.pw.' + S.event); renderTeacherLogin(e.message); }
+    else toast('연결이 잠시 끊겼어요');
+  }
+}
+function renderTeacher() {
+  const d = S.tdata, ms = d.missions;
+  const cellOf = (team, mid) => {
+    const subs = d.subs.filter(s => s.team === team && s.missionId === mid);
+    const st = subs.some(s => STATUS_CLASS[s.status] === 'done') ? 'done' : subs.some(s => s.status === '검토중') ? 'pending' : subs.length ? 'wrong' : '';
+    const label = st === 'done' ? '✓' : st === 'pending' ? '?' : st === 'wrong' ? '×' : '';
+    const title = st === 'done' ? '완료 — 누르면 되돌리기' : st === 'pending' ? '검토 대기' : st === 'wrong' ? '오답/반려' : '미도전';
+    return `<button class="cell ${st}" title="${title}" onclick="resetCell('${esc(team)}','${esc(mid)}','${st}')">${label}</button>`;
+  };
+  const pending = d.subs.filter(s => s.status === '검토중').sort((a, b) => new Date(a.time) - new Date(b.time));
+  const recent = d.subs.filter(s => s.status !== '검토중').slice(-12).reverse();
+  const mTitle = id => (ms.find(m => m.id === id) || {}).title || id;
+  const card = (s, withActions) => `<div class="card ${withActions ? 'pend' : ''}" id="c-${s.id}">
+      <div class="who"><b>${esc(s.team)}</b><span>${esc(mTitle(s.missionId))} · ${fmtTime(s.time)} <i class="tag ${STATUS_CLASS[s.status] || ''}">${esc(s.status)}${s.points ? ' ' + s.points + '점' : ''}</i></span></div>
+      ${s.photo ? `<img src="${esc(s.photo)}" alt="제출 사진" loading="lazy">` : ''}
+      ${s.answer && s.answer !== '도착' ? `<div class="ans">${esc(s.answer)}</div>` : ''}
+      ${withActions ? `<div class="row">
+        <input id="p-${s.id}" inputmode="numeric" value="${(ms.find(m => m.id === s.missionId) || {}).points || 0}"> 점
+        <button class="btn small" onclick="review('${s.id}','승인')">승인</button>
+        <button class="btn small ghost" onclick="review('${s.id}','반려')">반려</button>
+        <input id="n-${s.id}" style="width:auto;flex:1;min-width:120px;text-align:left" placeholder="학생에게 한마디 (선택)"></div>` : ''}
+    </div>`;
+  app.innerHTML = `
+    <div class="tbar no-print"><h1>${esc(S.boot?.title || '미션 현황판')}</h1>
+      <span class="live">${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} 갱신 · ${CONFIG.TEACHER_POLL / 1000}초마다 자동</span>
+      <button class="btn small ghost" onclick="renderPrint()">QR·코드 인쇄</button>
+      ${d.sheetUrl ? `<a class="btn small ghost" href="${esc(d.sheetUrl)}" target="_blank" rel="noopener">내 시트 열기</a>` : ''}
+      <button class="btn small ghost" onclick="backToStudent()">학생 화면</button></div>
+    <p class="live no-print" style="margin:-6px 0 12px">행사 코드 <b>${esc(S.event)}</b> · 학생용 링크 <code style="user-select:all">${esc(appLink())}</code> <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appLink())}')">복사</button></p>
+    <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th></tr></thead>
+      <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td></tr>`).join('')}</tbody></table></div>
+    <p class="live" style="margin:8px 0 0">${ms.map((m, i) => `${i + 1} ${esc(m.title)}`).join(' · ')}</p>
+    <div class="queue"><h2>검토 대기 ${pending.length}건</h2>
+      ${pending.length ? pending.map(s => card(s, true)).join('') : '<div class="msg">지금은 확인할 제출이 없어요.</div>'}</div>
+    <div class="queue"><h2>최근 기록</h2>${recent.map(s => card(s, false)).join('') || '<div class="msg">아직 제출이 없어요.</div>'}</div>
+    <p class="foot">${esc(COPYRIGHT)}</p>`;
+}
+function copyText(t) { navigator.clipboard?.writeText(t).then(() => toast('복사했어요'), () => toast('길게 눌러 복사하세요')); }
+async function review(id, status) {
+  const p = $('#p-' + id), n = $('#n-' + id);
+  const card = $('#c-' + id); if (card) card.style.opacity = .5;
+  try {
+    await api({ action: 'review', pw: S.teacherPw, id, status, points: p ? p.value : undefined, note: n ? n.value : '' });
+    toast(status === '승인' ? '승인했어요' : '반려했어요');
+    await refreshTeacher(false);
+  } catch (e) { toast(e.message); if (card) card.style.opacity = 1; }
+}
+async function resetCell(team, mid, st) {
+  if (st !== 'done' && st !== 'pending') return;
+  if (!confirm(`${team}의 이 미션을 되돌려 다시 도전하게 할까요?`)) return;
+  try { await api({ action: 'reset_mission', pw: S.teacherPw, team, missionId: mid }); toast('되돌렸어요'); await refreshTeacher(false); }
+  catch (e) { toast(e.message); }
+}
+
+/* ───────── QR·코드 인쇄 ───────── */
+function renderPrint() {
+  const ms = S.tdata.missions.filter(m => m.code);
+  const base = location.origin + location.pathname;
+  app.innerHTML = `
+    <div class="tbar no-print"><h1>장소 QR · 코드</h1><button class="btn small" onclick="window.print()">인쇄</button><button class="btn small ghost" onclick="renderTeacher()">현황판으로</button></div>
+    <p class="live no-print">QR을 찍으면 앱이 열리고 코드가 자동 입력돼요. 카메라가 없으면 숫자 코드를 직접 입력하면 됩니다. 학생용 링크: <b>${esc(appLink())}</b></p>
+    <div class="print-grid">${ms.map((m, i) => `<div class="qr-card"><h3>${esc(m.title)}</h3><div class="place">${esc(m.place)}</div>
+      <div class="qr" id="qr-${i}"></div><div class="code">${esc(m.code)}</div><div class="how">QR을 찍거나 위 숫자를 앱에 입력하세요</div></div>`).join('')}
+    ${ms.length ? '' : '<div class="msg">장소코드가 있는 미션이 없어요. 미션 시트의 장소코드 열을 채우세요.</div>'}</div>
+    <p class="foot">${esc(COPYRIGHT)}</p>`;
+  if (typeof QRCode === 'undefined') { toast('QR 라이브러리를 불러오지 못했어요. 숫자 코드로 인쇄돼요.'); return; }
+  ms.forEach((m, i) => new QRCode($('#qr-' + i), { text: appLink('code=' + encodeURIComponent(m.code)), width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M }));
+}
+
+/* ───────── 시작 ───────── */
+async function boot() {
+  S.event = resolveEvent();
+  if (!S.event) return renderStart();
+  renderLoading();
+  try {
+    S.boot = await api({ action: 'bootstrap' });
+    if (new URL(location.href).searchParams.get('mode') === 'teacher') { history.replaceState(null, '', appLink()); return goTeacher(); }
+    S.team ? refreshStudent(true) : renderLogin();
+  } catch (e) {
+    if (/행사 코드/.test(e.message)) { store.del('rally.event'); S.event = ''; return renderStart(e.message); }
+    renderFatal(e);
+  }
+}
+boot();
+</script>
+</body>
+</html>
