@@ -378,10 +378,8 @@ function renderStart(err = '') {
     </div>
     <div class="ticket" style="margin-top:14px">
       <h2 style="font-size:22px;color:var(--forest)">선생님이신가요?</h2>
-      <p style="margin:6px 0 10px;color:var(--ink-2);font-size:15px">Google 계정으로 로그인하면 <b>선생님 드라이브</b>에 미션 시트와 사진 폴더가 만들어지고 행사 코드가 나와요. 기록은 모두 선생님 계정에 저장됩니다.</p>
-      <label class="field"><span>행사 이름 (예: 2026 가을 순천만 체험학습)</span><input id="evTitle" maxlength="60" placeholder="행사 이름"></label>
+      <p style="margin:6px 0 10px;color:var(--ink-2);font-size:15px">Google 계정으로 로그인하면 <b>내 행사 목록</b>(행사 코드·비밀번호·현황판)이 나오고, 거기서 <b>새 행사</b>도 만들 수 있어요. 기록은 모두 선생님 드라이브에 저장됩니다.</p>
       <button class="btn block" id="gBtn">Google로 시작하기</button>
-      <p style="margin:12px 0 0;font-size:14px;color:var(--ink-2)">이미 행사 코드가 있다면 위에 코드를 넣고 입장한 뒤 화면 아래 "교사용 현황판"으로 가세요.</p>
     </div>
     <p class="foot">${esc(COPYRIGHT)}</p>`;
   $('#evBtn').onclick = () => {
@@ -393,11 +391,11 @@ function renderStart(err = '') {
   $('#gBtn').onclick = startGoogle;
 }
 async function startGoogle() {
-  const btn = $('#gBtn'); btn.disabled = true; btn.textContent = '준비 중…';
+  const btn = $('#gBtn'); if (btn) { btn.disabled = true; btn.textContent = '준비 중…'; }
   try {
-    const r = await api({ action: 'auth_url', appUrl: location.origin + location.pathname, title: $('#evTitle').value.trim() });
+    const r = await api({ action: 'auth_url', appUrl: location.origin + location.pathname });
     location.href = r.url;
-  } catch (e) { btn.disabled = false; btn.textContent = 'Google로 시작하기'; toast(e.message); }
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Google로 시작하기'; } toast(e.message); }
 }
 
 /* ───────── 화면: 로그인 ───────── */
@@ -487,7 +485,7 @@ function renderHome() {
       ${S.board.map((r, i) => `<li class="${r.team === S.team ? 'me' : ''}"><span>${i + 1}. ${esc(r.team)}</span><span>${r.points}점 · ${r.done}개</span></li>`).join('')}
     </ol></div>
     <div class="actions" style="margin-top:16px"><button class="btn ghost block" onclick="goBoard()">우리 반 미션 게시판 보기</button></div>
-    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="logout()">모둠 바꾸기</button> · <button onclick="goTeacher()">교사용</button></p>`;
+    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="logout()">모둠 바꾸기</button> · <button onclick="goTeacher()">교사용</button> · <button onclick="leaveEvent()">다른 행사</button></p>`;
   S.pressed = null;
   // QR로 들어온 경우: 해당 코드가 필요한 첫 미완료 미션 자동 열기
   if (S.codeFromQR) {
@@ -627,7 +625,11 @@ function renderTeacherLogin(err = '') {
     <div class="ticket"><label class="field"><span>교사 비밀번호 (내 시트의 '설정' 탭)</span><input id="pw" type="password" autocomplete="off"></label>
     ${err ? `<div class="msg err">${esc(err)}</div>` : ''}
     <button class="btn block" id="pwBtn">들어가기</button></div>
-    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="backToStudent()">학생 화면으로</button></p>`;
+    <div class="ticket" style="margin-top:14px">
+      <p style="margin:0 0 10px;color:var(--ink-2);font-size:15px">비밀번호를 모르거나, 다른 행사를 열거나, <b>새 행사를 만들려면</b></p>
+      <button class="btn ghost block" id="gBtn" onclick="startGoogle()">Google로 내 행사 열기</button>
+    </div>
+    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="backToStudent()">학생 화면으로</button> · <button onclick="leaveEvent()">다른 행사 코드 입력</button></p>`;
   $('#pwBtn').onclick = () => { S.teacherPw = $('#pw').value; refreshTeacher(true); };
   $('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#pwBtn').click(); });
 }
@@ -818,6 +820,8 @@ function renderPrint() {
 /* ───────── 시작 ───────── */
 async function boot() {
   S.event = resolveEvent();
+  const hp = new URLSearchParams(location.hash.slice(1)).get('pw');
+  if (hp && S.event) { store.sset('rally.pw.' + S.event, hp); S.teacherPw = ''; history.replaceState(null, '', location.pathname + location.search); }
   if (!S.event) return renderStart();
   renderLoading();
   try {
