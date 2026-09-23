@@ -147,7 +147,7 @@
   .photo-box { margin: 14px 0; }
   .photo-box img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; background: #fff; border: 2px solid var(--line); }
   .photo-box label.btn { width: 100%; }
-  .photo-box input { display: none; }
+  .photo-box input[type=file] { display: none; }
   .actions { display: grid; gap: 10px; margin-top: 16px; }
 
   /* ── 교사 현황판 ── */
@@ -183,6 +183,12 @@
   .bhead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; padding: 8px 0 12px; }
   .bhead h1 { font-size: 30px; color: var(--forest); line-height: 1.1; }
   .bhead .sub { font-size: 14px; color: var(--ink-2); margin-top: 6px; }
+  .ranks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin: 0 0 12px; }
+  .rank { display: flex; align-items: center; gap: 8px; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; }
+  .rank b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--ink-2); min-width: 18px; }
+  .rank span { font-family: var(--display); font-size: 17px; color: var(--forest); white-space: nowrap; }
+  .rank em { margin-left: auto; font-style: normal; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+  .rank.top { border-color: var(--sun); background: #FFF9E0; }
   .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; -webkit-overflow-scrolling: touch; }
   .chip { flex: none; min-height: 38px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--line); background: #fff; font-size: 15px; }
   .chip.on { border-color: var(--forest); background: var(--forest); color: #fff; }
@@ -393,10 +399,9 @@ async function login() {
   if (!pin) return renderLogin('PIN을 입력하세요');
   const btn = $('#loginBtn'); btn.disabled = true; btn.textContent = '확인 중…';
   try {
-    await api({ action: 'login', team, pin });
     S.team = team; S.pin = pin;
     store.set('rally.team', team); store.set('rally.pin', pin);
-    await refreshStudent(true);
+    await refreshStudent(true);   // state 요청 한 번으로 PIN 확인 + 기록 불러오기
   } catch (e) { renderLogin(e.message); }
 }
 function logout() {
@@ -410,7 +415,8 @@ function logout() {
 async function refreshStudent(first = false) {
   try {
     const d = await api({ action: 'state', team: S.team, pin: S.pin });
-    S.mine = d.mine; S.board = d.leaderboard;
+    if (!Array.isArray(d.mine)) throw new Error('서버 응답이 예상과 달라요: ' + JSON.stringify(d).slice(0, 160));
+    S.mine = d.mine; S.board = d.leaderboard || [];
     if (first) {
       const code = new URL(location.href).searchParams.get('code');
       if (code) { S.codeFromQR = code; history.replaceState(null, '', location.pathname); }
@@ -468,10 +474,11 @@ function openMission(id, prefillCode = '') {
   S.open = id; draft = { answer: '', choice: '', photo: '', code: prefillCode };
   renderSheet(m);
 }
-function closeMission() { S.open = null; const bg = $('#sheet'); if (bg) bg.remove(); }
+function closeMission() { S.open = null; S.editing = null; const bg = $('#sheet'); if (bg) bg.remove(); }
 function renderSheet(m, err = '') {
   const st = missionStatus(m.id);
-  const locked = st === 'done' || st === 'pending';
+  const editing = st === 'pending' && S.editing === m.id;
+  const locked = st === 'done' || (st === 'pending' && !editing);
   const last = S.mine.filter(s => s.missionId === m.id).slice(-1)[0];
   let body = '';
   if (locked) {
@@ -480,9 +487,14 @@ function renderSheet(m, err = '') {
       : `<div class="msg">선생님이 확인 중이에요. 잠시 뒤 도장이 찍혀요.</div>`;
     if (last?.photo) body += `<div class="photo-box"><img src="${esc(last.photo)}" alt="제출한 사진"></div>`;
     if (last?.answer && m.type !== '장소인증') body += `<div class="desc">${esc(last.answer)}</div>`;
+    if (st === 'pending' && (m.type === '사진' || m.type === '기록'))
+      body += `<div class="actions"><button class="btn ghost block" onclick="startEdit('${esc(m.id)}')">✏️ 수정하기</button></div>
+        <p class="hint">선생님이 확인하기 전까지 고칠 수 있어요.</p>`;
+    else if (st === 'done') body += `<p class="hint">완료된 미션을 고치려면 선생님께 말씀하세요.</p>`;
   } else {
+    if (editing) body += `<div class="msg">제출한 내용을 고치고 있어요. ${m.type === '사진' ? '사진을 다시 찍지 않으면 원래 사진이 유지돼요.' : ''}</div>`;
     if (st === 'wrong' && last) body += `<div class="msg err">${last.status === '반려' ? '다시 해 보세요.' : '아쉽지만 정답이 아니에요. 다시 도전!'}${last.note ? ' — ' + esc(last.note) : ''}</div>`;
-    if (m.needCode) body += `<label class="field"><span>장소 코드 (안내판 QR 또는 숫자)</span><input id="code" class="pin" inputmode="numeric" maxlength="8" value="${esc(draft.code)}" placeholder="0000"></label>`;
+    if (m.needCode && !editing) body += `<label class="field"><span>장소 코드 (안내판 QR 또는 숫자)</span><input id="code" class="pin" inputmode="numeric" maxlength="8" value="${esc(draft.code)}" placeholder="0000"></label>`;
     if (m.type === '퀴즈') {
       body += m.freeText
         ? `<label class="field"><span>답</span><input id="answer" value="${esc(draft.answer)}" placeholder="답을 쓰세요"></label>`
@@ -490,11 +502,12 @@ function renderSheet(m, err = '') {
     }
     if (m.type === '기록') body += `<label class="field"><span>관찰한 내용</span><textarea id="answer" placeholder="본 것, 들은 것, 느낀 것을 적어요">${esc(draft.answer)}</textarea></label>`;
     if (m.type === '사진') body += `<div class="photo-box">
-        ${draft.photo ? `<img src="${draft.photo}" alt="찍은 사진">` : ''}
+        ${draft.photo ? `<img src="${draft.photo}" alt="찍은 사진">` : (editing && last?.photo ? `<img src="${esc(last.photo)}" alt="원래 사진">` : '')}
         <label class="btn ghost">${draft.photo ? '다시 찍기' : '📷 사진 찍기'}<input type="file" accept="image/*" capture="environment" onchange="onPhoto(this)"></label>
         <label class="field"><span>한 줄 설명 (선택)</span><input id="answer" value="${esc(draft.answer)}" placeholder="어디에서 무엇을 찍었나요?"></label></div>`;
     if (err) body += `<div class="msg err">${esc(err)}</div>`;
-    body += `<div class="actions"><button class="btn sun block" id="submitBtn" onclick="submitMission('${esc(m.id)}')">${m.type === '장소인증' ? '도착 도장 찍기' : '제출하기'}</button></div>`;
+    body += `<div class="actions"><button class="btn sun block" id="submitBtn" onclick="submitMission('${esc(m.id)}')">${editing ? '수정 완료' : m.type === '장소인증' ? '도착 도장 찍기' : '제출하기'}</button>
+      ${editing ? `<button class="btn ghost block" onclick="cancelEdit('${esc(m.id)}')">취소</button>` : ''}</div>`;
   }
   const html = `<div class="sheet-bg" id="sheet" onclick="if(event.target===this)closeMission()"><div class="sheet" role="dialog" aria-modal="true">
     <div class="sheet-head"><h2>${esc(m.title)}</h2><button class="close" aria-label="닫기" onclick="closeMission()">×</button></div>
@@ -524,24 +537,39 @@ function onPhoto(input) {
   };
   img.src = url;
 }
+function startEdit(id) {
+  const m = S.boot.missions.find(x => x.id === id);
+  const last = S.mine.filter(s => s.missionId === id).slice(-1)[0] || {};
+  S.editing = id; draft = { answer: last.answer || '', choice: '', photo: '', code: '' };
+  renderSheet(m);
+}
+function cancelEdit(id) { S.editing = null; renderSheet(S.boot.missions.find(x => x.id === id)); }
 async function submitMission(id) {
   const m = S.boot.missions.find(x => x.id === id);
   grabDraft();
-  const payload = { action: 'submit', team: S.team, pin: S.pin, missionId: id, code: draft.code };
+  const isEdit = S.editing === id;
+  const payload = { action: 'submit', team: S.team, pin: S.pin, missionId: id, code: draft.code, edit: isEdit };
   if (m.type === '퀴즈') payload.answer = m.freeText ? draft.answer : draft.choice;
   if (m.type === '기록' || m.type === '사진') payload.answer = draft.answer;
-  if (m.type === '사진') { if (!draft.photo) return renderSheet(m, '먼저 사진을 찍어 주세요'); payload.photo = draft.photo; payload.photoType = 'image/jpeg'; }
+  if (m.type === '사진') {
+    if (!draft.photo && !isEdit) return renderSheet(m, '먼저 사진을 찍어 주세요');
+    if (draft.photo) { payload.photo = draft.photo; payload.photoType = 'image/jpeg'; }
+  }
   if (m.type === '퀴즈' && !payload.answer) return renderSheet(m, '답을 고르거나 써 주세요');
-  if (m.needCode && !draft.code) return renderSheet(m, '장소 코드를 입력하세요');
+  if (m.needCode && !draft.code && !isEdit) return renderSheet(m, '장소 코드를 입력하세요');
   const btn = $('#submitBtn'); btn.disabled = true; btn.textContent = '보내는 중…';
   try {
     const r = await api(payload);
     if (!r.ok) return renderSheet(m, r.error);
-    if (r.status === '완료') { toast(`도장 쾅! +${r.points}점`); S.pressed = id; }
+    if (r.edited) toast('수정했어요. 선생님이 확인하면 도장이 찍혀요.');
+    else if (r.status === '완료') { toast(`도장 쾅! +${r.points}점`); S.pressed = id; }
     else if (r.status === '검토중') toast('제출했어요. 선생님이 확인하면 도장이 찍혀요.');
     else if (r.status === '오답') toast('정답이 아니에요. 다시 도전!');
+    S.editing = null;
     closeMission();
-    S.mine.push({ missionId: id, status: r.status, points: r.points || 0, answer: payload.answer || '', photo: r.photo || '', time: new Date().toISOString(), note: '' });
+    const entry = { missionId: id, status: r.status, points: r.points || 0, answer: payload.answer || '', photo: r.photo || '', time: new Date().toISOString(), note: '' };
+    if (r.edited) { const i = S.mine.map(x => x.missionId).lastIndexOf(id); if (i >= 0) S.mine[i] = entry; else S.mine.push(entry); }
+    else S.mine.push(entry);
     renderHome();
     refreshStudent(false);
   } catch (e) { renderSheet(m, e.message); }
@@ -657,7 +685,8 @@ function renderBoard() {
         <div class="meta"><span>${p.status === '검토중' ? '선생님 확인 중' : `+${p.points}점`}</span><span>${fmtTime(p.time)}</span></div></div></div>`;
   app.innerHTML = `
     <div class="bhead"><div><h1>우리 반 미션 게시판</h1><div class="sub">${esc(d.title)} · 완료 ${done}개 · ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 갱신</div></div>
-      <div class="board" style="margin:0;padding:8px 12px;min-width:160px"><ol>${d.leaderboard.slice(0, 3).map((r, i) => `<li><span>${i + 1}. ${esc(r.team)}</span><span>${r.points}점</span></li>`).join('')}</ol></div></div>
+      </div>
+    <div class="ranks">${d.leaderboard.map((r, i) => `<div class="rank ${i === 0 && r.points > 0 ? 'top' : ''}"><b>${i + 1}</b><span>${esc(r.team)}</span><em>${r.points}점 · ${r.done}개</em></div>`).join('')}</div>
     <div class="chips"><button class="chip ${S.bfilter ? '' : 'on'}" onclick="setBoardFilter('')">전체</button>
       ${d.missions.map(m => `<button class="chip ${S.bfilter === m.id ? 'on' : ''}" onclick="setBoardFilter('${esc(m.id)}')">${esc(m.title)}</button>`).join('')}</div>
     ${posts.length ? `<div class="wall">${posts.map(card).join('')}</div>` : '<div class="empty">아직 올라온 미션이 없어요. 첫 도장을 찍어 보세요!</div>'}
