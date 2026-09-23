@@ -507,9 +507,10 @@ function openMission(id, prefillCode = '') {
 function closeMission() { S.open = null; S.editing = null; const bg = $('#sheet'); if (bg) bg.remove(); }
 function renderSheet(m, err = '') {
   const st = missionStatus(m.id);
-  const editing = st === 'pending' && S.editing === m.id;
-  const locked = st === 'done' || (st === 'pending' && !editing);
   const last = S.mine.filter(s => s.missionId === m.id).slice(-1)[0];
+  const canRetake = m.type === '사진' && S.boot.autoPhoto && st === 'done' && last && last.status === '완료';
+  const editing = (st === 'pending' || canRetake) && S.editing === m.id;
+  const locked = (st === 'done' || st === 'pending') && !editing;
   let body = '';
   if (locked) {
     body = st === 'done'
@@ -522,6 +523,9 @@ function renderSheet(m, err = '') {
     if (st === 'pending' && (isPhotoType(m) || m.type === '기록'))
       body += `<div class="actions"><button class="btn ghost block" onclick="startEdit('${esc(m.id)}')">✏️ ${m.contest ? '작품 바꾸기' : '수정하기'}</button></div>
         <p class="hint">${m.contest ? '심사 전까지 사진과 제목을 바꿀 수 있어요.' : '선생님이 확인하기 전까지 고칠 수 있어요.'}</p>`;
+    else if (canRetake)
+      body += `<div class="actions"><button class="btn ghost block" onclick="startEdit('${esc(m.id)}')">📷 다시 찍기</button></div>
+        <p class="hint">더 잘 나온 사진이 있으면 바꿀 수 있어요. 도장과 점수는 그대로예요.</p>`;
     else if (st === 'done') body += `<p class="hint">완료된 미션을 고치려면 선생님께 말씀하세요.</p>`;
   } else {
     if (editing) body += `<div class="msg">제출한 내용을 고치고 있어요. ${isPhotoType(m) ? '사진을 다시 찍지 않으면 원래 사진이 유지돼요.' : ''}</div>`;
@@ -659,11 +663,14 @@ function renderTeacher() {
       <button class="btn small" onclick="goJudge('${esc(m.id)}')">심사하기</button></div>`;
   }).join('');
   const recent = d.subs.filter(s => s.status !== '검토중').slice(-12).reverse();
+  const undoBtn = s => s.type === '사진' && s.status === '완료'
+    ? `<div class="row"><button class="btn small ghost" onclick="undoPhoto('${s.id}')">되돌리기</button><span class="live">잘못 찍었거나 알맞지 않은 사진이면 되돌려 다시 찍게 해요</span></div>` : '';
   const mTitle = id => (ms.find(m => m.id === id) || {}).title || id;
   const card = (s, withActions) => `<div class="card ${withActions ? 'pend' : ''}" id="c-${s.id}">
       <div class="who"><b>${esc(s.team)}</b><span>${esc(mTitle(s.missionId))} · ${fmtTime(s.time)} <i class="tag ${STATUS_CLASS[s.status] || ''}">${esc(s.award || s.status)}${s.points ? ' ' + s.points + '점' : ''}</i></span></div>
       ${s.photo ? `<img src="${esc(s.photo)}" alt="제출 사진" loading="lazy">` : ''}
       ${s.answer && s.answer !== '도착' ? `<div class="ans">${esc(s.answer)}</div>` : ''}
+      ${withActions ? '' : undoBtn(s)}
       ${withActions ? `<div class="row">
         <input id="p-${s.id}" inputmode="numeric" value="${(ms.find(m => m.id === s.missionId) || {}).points || 0}"> 점
         <button class="btn small" onclick="review('${s.id}','승인')">승인</button>
@@ -677,7 +684,7 @@ function renderTeacher() {
       <a class="btn small ghost" href="${esc(appLink('mode=board'))}" target="_blank" rel="noopener">게시판 열기</a>
       ${d.sheetUrl ? `<a class="btn small ghost" href="${esc(d.sheetUrl)}" target="_blank" rel="noopener">내 시트 열기</a>` : ''}
       <button class="btn small ghost" onclick="backToStudent()">학생 화면</button></div>
-    <p class="live no-print" style="margin:-6px 0 12px">행사 코드 <b>${esc(S.event)}</b> · 학생용 링크 <code style="user-select:all">${esc(appLink())}</code> <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appLink())}')">복사</button></p>
+    <p class="live no-print" style="margin:-6px 0 12px">${S.boot?.autoPhoto ? '📷 사진 자동 승인 켜짐 · ' : ''}행사 코드 <b>${esc(S.event)}</b> · 학생용 링크 <code style="user-select:all">${esc(appLink())}</code> <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appLink())}')">복사</button></p>
     <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th></tr></thead>
       <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td></tr>`).join('')}</tbody></table></div>
     <p class="live" style="margin:8px 0 0">${ms.map((m, i) => `${i + 1} ${esc(m.title)}`).join(' · ')}</p>
@@ -730,6 +737,15 @@ async function giveAward(id, award) {
   } catch (e) { toast(e.message); if (el) el.style.opacity = 1; }
 }
 
+async function undoPhoto(id) {
+  const note = prompt('모둠에게 전할 한마디 (선택)\n예: 모둠원이 모두 나오게 다시 찍어요', '') ;
+  if (note === null) return;
+  try {
+    await api({ action: 'review', pw: S.teacherPw, id, status: '반려', note });
+    toast('되돌렸어요. 모둠이 다시 찍을 수 있어요');
+    await refreshTeacher(false);
+  } catch (e) { toast(e.message); }
+}
 async function review(id, status) {
   const p = $('#p-' + id), n = $('#n-' + id);
   const card = $('#c-' + id); if (card) card.style.opacity = .5;
