@@ -207,6 +207,31 @@
   @media (prefers-reduced-motion: reduce) { .post.new { animation: none; } }
   .empty { text-align: center; padding: 40px 16px; color: var(--ink-2); }
 
+  /* ── 사진 공모전 ── */
+  .award { display: inline-flex; align-items: center; gap: 4px; font-family: var(--display); font-size: 15px; padding: 2px 10px; border-radius: 999px; background: var(--sun); color: var(--ink); }
+  .award.a0 { background: #F2B705; } .award.a1 { background: #FFD95A; } .award.a2 { background: #DCE3E8; } .award.a3 { background: #E8C3A0; } .award.a4 { background: #DDF3E0; color: #17502A; }
+  .post .award { margin-left: 6px; }
+  .awardtbl { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
+  .awardtbl span { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .judge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .entry { background: #fff; border: 2px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+  .entry.won { border-color: var(--sun); box-shadow: 0 0 0 3px #FFF1BF; }
+  .entry a.ph { display: block; background: var(--paper-2); }
+  .entry img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+  .entry .body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .entry .who { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .entry .who b { font-family: var(--display); font-weight: 400; font-size: 19px; color: var(--forest); }
+  .entry .ttl { font-size: 15px; }
+  .abtns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: auto; }
+  .abtns button { min-height: 44px; border-radius: 10px; border: 2px solid var(--line); background: #fff; font-family: var(--display); font-size: 15px; line-height: 1.1; padding: 2px; }
+  .abtns button small { display: block; font-family: var(--sans); font-size: 11px; color: var(--ink-2); }
+  .abtns button.on { border-color: var(--forest); background: var(--forest); color: #fff; }
+  .abtns button.on small { color: #DDF3E0; }
+  .contest-row { display: flex; align-items: center; gap: 10px; background: #fff; border: 2px solid var(--sun); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; }
+  .contest-row b { font-family: var(--display); font-weight: 400; font-size: 19px; color: var(--forest); }
+  .contest-row span { font-size: 14px; color: var(--ink-2); }
+  .contest-row .btn { margin-left: auto; }
+
   /* ── QR 인쇄 ── */
   .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .qr-card { border: 2px solid var(--ink); border-radius: 14px; padding: 16px; text-align: center; page-break-inside: avoid; background: #fff; }
@@ -312,7 +337,11 @@ function missionStatus(id) {
 }
 function myPoints() { return S.mine.filter(s => s.status === '완료' || s.status === '승인').reduce((a, s) => a + (s.points || 0), 0); }
 function lastNote(id) { const s = S.mine.filter(x => x.missionId === id).slice(-1)[0]; return s ? s.note : ''; }
-const TYPE_LABEL = { '장소인증': '장소 도착', '사진': '사진 미션', '퀴즈': '퀴즈', '기록': '관찰 기록' };
+const TYPE_LABEL = { '장소인증': '장소 도착', '사진': '사진 미션', '퀴즈': '퀴즈', '기록': '관찰 기록', '공모전': '사진 공모전' };
+const AWARD_NAMES = ['대상', '금상', '은상', '동상', '입선'];
+const isPhotoType = m => m.type === '사진' || m.type === '공모전';
+const awardBadge = a => a ? `<span class="award a${AWARD_NAMES.indexOf(a)}">🏆 ${esc(a)}</span>` : '';
+function myAward(id) { const s = S.mine.filter(x => x.missionId === id && x.award).slice(-1)[0]; return s ? s.award : ''; }
 const STATUS_CLASS = { '완료': 'done', '승인': 'done', '검토중': 'pending', '오답': 'wrong', '반려': 'wrong' };
 function fmtTime(iso) { const d = new Date(iso); return isNaN(d) ? '' : `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
@@ -445,10 +474,11 @@ function renderHome() {
     <div class="stamps">
       ${ms.map((m, i) => {
         const st = missionStatus(m.id);
-        const seal = st === 'done' ? `<div class="seal ${S.pressed === m.id ? 'press' : ''}">완료</div>`
-                   : st === 'pending' ? `<div class="seal wait">검토중</div>` : '';
+        const aw = m.contest ? myAward(m.id) : '';
+        const seal = st === 'done' ? `<div class="seal ${S.pressed === m.id ? 'press' : ''}">${aw ? esc(aw) : '완료'}</div>`
+                   : st === 'pending' ? `<div class="seal wait">${m.contest ? '출품' : '검토중'}</div>` : '';
         return `<button class="stamp ${st}" onclick="openMission('${esc(m.id)}')">
-          <span class="no">${i + 1}</span><span class="pts">${m.points}점</span>
+          <span class="no">${i + 1}</span><span class="pts">${m.contest ? '🏆 공모전' : m.points + '점'}</span>
           <span class="title">${esc(m.title)}</span>
           <span class="place">${esc(TYPE_LABEL[m.type] || m.type)}${m.place ? ' · ' + esc(m.place) : ''}</span>${seal}</button>`;
       }).join('')}
@@ -483,16 +513,18 @@ function renderSheet(m, err = '') {
   let body = '';
   if (locked) {
     body = st === 'done'
-      ? `<div class="msg ok">완료한 미션이에요. ${last?.points ? `+${last.points}점` : ''}</div>`
-      : `<div class="msg">선생님이 확인 중이에요. 잠시 뒤 도장이 찍혀요.</div>`;
+      ? (m.contest && last?.award ? `<div class="msg ok">${awardBadge(last.award)} 수상을 축하해요! +${last.points}점</div>`
+                                  : `<div class="msg ok">완료한 미션이에요. ${last?.points ? `+${last.points}점` : ''}</div>`)
+      : (m.contest ? `<div class="msg">출품 완료! 담임선생님이 심사하고 있어요.</div>`
+                   : `<div class="msg">선생님이 확인 중이에요. 잠시 뒤 도장이 찍혀요.</div>`);
     if (last?.photo) body += `<div class="photo-box"><img src="${esc(last.photo)}" alt="제출한 사진"></div>`;
     if (last?.answer && m.type !== '장소인증') body += `<div class="desc">${esc(last.answer)}</div>`;
-    if (st === 'pending' && (m.type === '사진' || m.type === '기록'))
-      body += `<div class="actions"><button class="btn ghost block" onclick="startEdit('${esc(m.id)}')">✏️ 수정하기</button></div>
-        <p class="hint">선생님이 확인하기 전까지 고칠 수 있어요.</p>`;
+    if (st === 'pending' && (isPhotoType(m) || m.type === '기록'))
+      body += `<div class="actions"><button class="btn ghost block" onclick="startEdit('${esc(m.id)}')">✏️ ${m.contest ? '작품 바꾸기' : '수정하기'}</button></div>
+        <p class="hint">${m.contest ? '심사 전까지 사진과 제목을 바꿀 수 있어요.' : '선생님이 확인하기 전까지 고칠 수 있어요.'}</p>`;
     else if (st === 'done') body += `<p class="hint">완료된 미션을 고치려면 선생님께 말씀하세요.</p>`;
   } else {
-    if (editing) body += `<div class="msg">제출한 내용을 고치고 있어요. ${m.type === '사진' ? '사진을 다시 찍지 않으면 원래 사진이 유지돼요.' : ''}</div>`;
+    if (editing) body += `<div class="msg">제출한 내용을 고치고 있어요. ${isPhotoType(m) ? '사진을 다시 찍지 않으면 원래 사진이 유지돼요.' : ''}</div>`;
     if (st === 'wrong' && last) body += `<div class="msg err">${last.status === '반려' ? '다시 해 보세요.' : '아쉽지만 정답이 아니에요. 다시 도전!'}${last.note ? ' — ' + esc(last.note) : ''}</div>`;
     if (m.needCode && !editing) body += `<label class="field"><span>장소 코드 (안내판 QR 또는 숫자)</span><input id="code" class="pin" inputmode="numeric" maxlength="8" value="${esc(draft.code)}" placeholder="0000"></label>`;
     if (m.type === '퀴즈') {
@@ -501,18 +533,19 @@ function renderSheet(m, err = '') {
         : `<div class="choices">${m.choices.map(c => `<button class="choice ${draft.choice === c ? 'on' : ''}" onclick="pick('${esc(c)}')">${esc(c)}</button>`).join('')}</div>`;
     }
     if (m.type === '기록') body += `<label class="field"><span>관찰한 내용</span><textarea id="answer" placeholder="본 것, 들은 것, 느낀 것을 적어요">${esc(draft.answer)}</textarea></label>`;
-    if (m.type === '사진') body += `<div class="photo-box">
+    if (isPhotoType(m)) body += `<div class="photo-box">
         ${draft.photo ? `<img src="${draft.photo}" alt="찍은 사진">` : (editing && last?.photo ? `<img src="${esc(last.photo)}" alt="원래 사진">` : '')}
         <label class="btn ghost">${draft.photo ? '다시 찍기' : '📷 사진 찍기'}<input type="file" accept="image/*" capture="environment" onchange="onPhoto(this)"></label>
-        <label class="field"><span>한 줄 설명 (선택)</span><input id="answer" value="${esc(draft.answer)}" placeholder="어디에서 무엇을 찍었나요?"></label></div>`;
+        <label class="field"><span>${m.contest ? '작품 제목' : '한 줄 설명 (선택)'}</span><input id="answer" value="${esc(draft.answer)}" placeholder="${m.contest ? '우리 작품의 제목을 지어 주세요' : '어디에서 무엇을 찍었나요?'}"></label></div>`;
     if (err) body += `<div class="msg err">${esc(err)}</div>`;
-    body += `<div class="actions"><button class="btn sun block" id="submitBtn" onclick="submitMission('${esc(m.id)}')">${editing ? '수정 완료' : m.type === '장소인증' ? '도착 도장 찍기' : '제출하기'}</button>
+    body += `<div class="actions"><button class="btn sun block" id="submitBtn" onclick="submitMission('${esc(m.id)}')">${editing ? '수정 완료' : m.type === '장소인증' ? '도착 도장 찍기' : m.contest ? '출품하기' : '제출하기'}</button>
       ${editing ? `<button class="btn ghost block" onclick="cancelEdit('${esc(m.id)}')">취소</button>` : ''}</div>`;
   }
   const html = `<div class="sheet-bg" id="sheet" onclick="if(event.target===this)closeMission()"><div class="sheet" role="dialog" aria-modal="true">
     <div class="sheet-head"><h2>${esc(m.title)}</h2><button class="close" aria-label="닫기" onclick="closeMission()">×</button></div>
-    <div class="meta"><span>${esc(TYPE_LABEL[m.type] || m.type)}</span>${m.place ? `<span>📍 ${esc(m.place)}</span>` : ''}<span>${m.points}점</span></div>
+    <div class="meta"><span>${esc(TYPE_LABEL[m.type] || m.type)}</span>${m.place ? `<span>📍 ${esc(m.place)}</span>` : ''}<span>${m.contest ? '대상 ' + m.points + '점' : m.points + '점'}</span></div>
     <div class="desc">${esc(m.desc)}</div>${m.hint ? `<p class="hint">힌트: ${esc(m.hint)}</p>` : ''}
+    ${m.contest && m.awards ? `<div class="awardtbl">${m.awards.map(a => `<span>${esc(a.name)} ${a.points}점</span>`).join('')}</div>` : ''}
     ${body}</div></div>`;
   const old = $('#sheet'); if (old) old.remove();
   app.insertAdjacentHTML('beforeend', html);
@@ -550,8 +583,9 @@ async function submitMission(id) {
   const isEdit = S.editing === id;
   const payload = { action: 'submit', team: S.team, pin: S.pin, missionId: id, code: draft.code, edit: isEdit };
   if (m.type === '퀴즈') payload.answer = m.freeText ? draft.answer : draft.choice;
-  if (m.type === '기록' || m.type === '사진') payload.answer = draft.answer;
-  if (m.type === '사진') {
+  if (m.type === '기록' || isPhotoType(m)) payload.answer = draft.answer;
+  if (m.contest && !isEdit && !draft.answer.trim()) return renderSheet(m, '작품 제목을 지어 주세요');
+  if (isPhotoType(m)) {
     if (!draft.photo && !isEdit) return renderSheet(m, '먼저 사진을 찍어 주세요');
     if (draft.photo) { payload.photo = draft.photo; payload.photoType = 'image/jpeg'; }
   }
@@ -563,11 +597,12 @@ async function submitMission(id) {
     if (!r.ok) return renderSheet(m, r.error);
     if (r.edited) toast('수정했어요. 선생님이 확인하면 도장이 찍혀요.');
     else if (r.status === '완료') { toast(`도장 쾅! +${r.points}점`); S.pressed = id; }
+    else if (r.status === '검토중' && m.contest) toast('출품했어요! 담임선생님이 심사해요.');
     else if (r.status === '검토중') toast('제출했어요. 선생님이 확인하면 도장이 찍혀요.');
     else if (r.status === '오답') toast('정답이 아니에요. 다시 도전!');
     S.editing = null;
     closeMission();
-    const entry = { missionId: id, status: r.status, points: r.points || 0, answer: payload.answer || '', photo: r.photo || '', time: new Date().toISOString(), note: '' };
+    const entry = { missionId: id, status: r.status, points: r.points || 0, answer: payload.answer || '', photo: r.photo || '', time: new Date().toISOString(), note: '', award: '' };
     if (r.edited) { const i = S.mine.map(x => x.missionId).lastIndexOf(id); if (i >= 0) S.mine[i] = entry; else S.mine.push(entry); }
     else S.mine.push(entry);
     renderHome();
@@ -578,6 +613,7 @@ async function submitMission(id) {
 /* ───────── 교사 현황판 ───────── */
 function goTeacher() {
   if (!S.event) return renderStart();
+  S.judgeId = null;
   stopPolling(); S.view = 'teacher';
   S.teacherPw = S.teacherPw || store.sget('rally.pw.' + S.event);
   S.teacherPw ? refreshTeacher(true) : renderTeacherLogin();
@@ -598,6 +634,7 @@ async function refreshTeacher(first = false) {
     store.sset('rally.pw.' + S.event, S.teacherPw);
     S.tdata = d;
     if (S.view === 'teacher') renderTeacher();
+    else if (S.view === 'judge') renderJudge();
     if (first) { clearInterval(S.timers.teacher); S.timers.teacher = setInterval(() => refreshTeacher(false), CONFIG.TEACHER_POLL); }
   } catch (e) {
     if (first) { S.teacherPw = ''; store.sdel('rally.pw.' + S.event); renderTeacherLogin(e.message); }
@@ -609,15 +646,22 @@ function renderTeacher() {
   const cellOf = (team, mid) => {
     const subs = d.subs.filter(s => s.team === team && s.missionId === mid);
     const st = subs.some(s => STATUS_CLASS[s.status] === 'done') ? 'done' : subs.some(s => s.status === '검토중') ? 'pending' : subs.length ? 'wrong' : '';
-    const label = st === 'done' ? '✓' : st === 'pending' ? '?' : st === 'wrong' ? '×' : '';
+    const aw = (subs.filter(s => s.award).slice(-1)[0] || {}).award;
+    const label = st === 'done' ? (aw ? aw[0] : '✓') : st === 'pending' ? '?' : st === 'wrong' ? '×' : '';
     const title = st === 'done' ? '완료 — 누르면 되돌리기' : st === 'pending' ? '검토 대기' : st === 'wrong' ? '오답/반려' : '미도전';
     return `<button class="cell ${st}" title="${title}" onclick="resetCell('${esc(team)}','${esc(mid)}','${st}')">${label}</button>`;
   };
-  const pending = d.subs.filter(s => s.status === '검토중').sort((a, b) => new Date(a.time) - new Date(b.time));
+  const contestIds = new Set(ms.filter(m => m.contest).map(m => m.id));
+  const pending = d.subs.filter(s => s.status === '검토중' && !contestIds.has(s.missionId)).sort((a, b) => new Date(a.time) - new Date(b.time));
+  const contestRows = ms.filter(m => m.contest).map(m => {
+    const es = contestEntries(m.id); const judged = es.filter(e => e.award).length;
+    return `<div class="contest-row"><div><b>🏆 ${esc(m.title)}</b><br><span>출품 ${es.length}작품 · 심사 완료 ${judged}작품</span></div>
+      <button class="btn small" onclick="goJudge('${esc(m.id)}')">심사하기</button></div>`;
+  }).join('');
   const recent = d.subs.filter(s => s.status !== '검토중').slice(-12).reverse();
   const mTitle = id => (ms.find(m => m.id === id) || {}).title || id;
   const card = (s, withActions) => `<div class="card ${withActions ? 'pend' : ''}" id="c-${s.id}">
-      <div class="who"><b>${esc(s.team)}</b><span>${esc(mTitle(s.missionId))} · ${fmtTime(s.time)} <i class="tag ${STATUS_CLASS[s.status] || ''}">${esc(s.status)}${s.points ? ' ' + s.points + '점' : ''}</i></span></div>
+      <div class="who"><b>${esc(s.team)}</b><span>${esc(mTitle(s.missionId))} · ${fmtTime(s.time)} <i class="tag ${STATUS_CLASS[s.status] || ''}">${esc(s.award || s.status)}${s.points ? ' ' + s.points + '점' : ''}</i></span></div>
       ${s.photo ? `<img src="${esc(s.photo)}" alt="제출 사진" loading="lazy">` : ''}
       ${s.answer && s.answer !== '도착' ? `<div class="ans">${esc(s.answer)}</div>` : ''}
       ${withActions ? `<div class="row">
@@ -637,12 +681,55 @@ function renderTeacher() {
     <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th></tr></thead>
       <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td></tr>`).join('')}</tbody></table></div>
     <p class="live" style="margin:8px 0 0">${ms.map((m, i) => `${i + 1} ${esc(m.title)}`).join(' · ')}</p>
+    ${contestRows ? `<div class="queue"><h2>사진 공모전 심사</h2>${contestRows}</div>` : ''}
     <div class="queue"><h2>검토 대기 ${pending.length}건</h2>
       ${pending.length ? pending.map(s => card(s, true)).join('') : '<div class="msg">지금은 확인할 제출이 없어요.</div>'}</div>
     <div class="queue"><h2>최근 기록</h2>${recent.map(s => card(s, false)).join('') || '<div class="msg">아직 제출이 없어요.</div>'}</div>
     <p class="foot">${esc(COPYRIGHT)}</p>`;
 }
 function copyText(t) { navigator.clipboard?.writeText(t).then(() => toast('복사했어요'), () => toast('길게 눌러 복사하세요')); }
+/* ───────── 사진 공모전 심사 ───────── */
+function contestEntries(mid) {
+  // 모둠별 가장 최근 출품작 (반려된 것 제외)
+  const by = {};
+  S.tdata.subs.filter(s => s.missionId === mid && (s.status === '검토중' || s.status === '승인')).forEach(s => { by[s.team] = s; });
+  return Object.values(by);
+}
+function goJudge(mid) { S.view = 'judge'; S.judgeId = mid; renderJudge(); }
+function renderJudge() {
+  const m = S.tdata.missions.find(x => x.id === S.judgeId);
+  if (!m) { S.view = 'teacher'; return renderTeacher(); }
+  const es = contestEntries(m.id).sort((a, b) => (AWARD_NAMES.indexOf(a.award) + 1 || 99) - (AWARD_NAMES.indexOf(b.award) + 1 || 99) || a.team.localeCompare(b.team, 'ko'));
+  const count = n => es.filter(e => e.award === n).length;
+  const awards = m.awards || AWARD_NAMES.map(n => ({ name: n, points: 0 }));
+  app.innerHTML = `
+    <div class="tbar"><h1>🏆 ${esc(m.title)}</h1>
+      <button class="btn small ghost" onclick="S.view='teacher';renderTeacher()">현황판으로</button></div>
+    <p class="live" style="margin:-6px 0 10px">작품을 누르면 크게 볼 수 있어요. 상을 다시 누르면 취소돼요. 수상작은 바로 게시판에 배지와 함께 올라가요.</p>
+    <div class="awardtbl" style="margin:0 0 14px">${awards.map(a => `<span>${esc(a.name)} ${a.points}점 · ${count(a.name)}작품</span>`).join('')}<span>미심사 ${es.filter(e => !e.award).length}작품</span></div>
+    ${es.length ? `<div class="judge-grid">${es.map(e => `
+      <div class="entry ${e.award ? 'won' : ''}" id="e-${e.id}">
+        ${e.photo ? `<a class="ph" href="${esc(e.photo.replace('sz=w800', 'sz=w2000'))}" target="_blank" rel="noopener"><img src="${esc(e.photo)}" alt="${esc(e.team)} 작품" loading="lazy"></a>` : ''}
+        <div class="body">
+          <div class="who"><b>${esc(e.team)}</b>${awardBadge(e.award)}</div>
+          <div class="ttl">${esc(e.answer || '(제목 없음)')}</div>
+          <div class="abtns">${awards.map(a => `<button class="${e.award === a.name ? 'on' : ''}" onclick="giveAward('${e.id}','${e.award === a.name ? '' : esc(a.name)}')">${esc(a.name)}<small>${a.points}점</small></button>`).join('')}</div>
+        </div></div>`).join('')}</div>`
+      : '<div class="msg">아직 출품한 모둠이 없어요.</div>'}
+    <p class="foot">${esc(COPYRIGHT)}</p>`;
+}
+async function giveAward(id, award) {
+  const el = $('#e-' + id); if (el) el.style.opacity = .5;
+  try {
+    const r = await api({ action: 'award', pw: S.teacherPw, id, award });
+    const sub = S.tdata.subs.find(s => s.id === id);
+    if (sub) { sub.award = r.award; sub.status = r.award ? '승인' : '검토중'; sub.points = r.points; }
+    toast(award ? `${award} 수여!` : '상을 취소했어요');
+    renderJudge();
+    refreshTeacher(false);
+  } catch (e) { toast(e.message); if (el) el.style.opacity = 1; }
+}
+
 async function review(id, status) {
   const p = $('#p-' + id), n = $('#n-' + id);
   const card = $('#c-' + id); if (card) card.style.opacity = .5;
@@ -674,20 +761,23 @@ async function refreshBoard(first = false) {
 function renderBoard() {
   const d = S.bdata;
   const mTitle = id => (d.missions.find(m => m.id === id) || {}).title || id;
-  const posts = S.bfilter ? d.posts.filter(p => p.missionId === S.bfilter) : d.posts;
+  const rank = p => AWARD_NAMES.indexOf(p.award);
+  const posts = S.bfilter === '__award' ? d.posts.filter(p => p.award).sort((a, b) => rank(a) - rank(b))
+              : S.bfilter ? d.posts.filter(p => p.missionId === S.bfilter) : d.posts;
   const seen = S.bseen; S.bseen = new Set(d.posts.map(p => p.id));
   const done = d.posts.filter(p => p.status !== '검토중').length;
   const card = p => `<div class="post ${seen && !seen.has(p.id) ? 'new' : ''}">
       ${p.photo ? `<img src="${esc(p.photo)}" alt="${esc(p.team)} 사진" loading="lazy">` : ''}
-      <div class="body"><span class="team">${esc(p.team)}</span>
+      <div class="body"><span class="team">${esc(p.team)}</span>${awardBadge(p.award)}
         <div class="mtitle">${esc(mTitle(p.missionId))}</div>
         ${p.answer && p.answer !== '도착' ? `<div class="text">${esc(p.answer)}</div>` : (p.type === '장소인증' ? '<div class="text">도착 완료!</div>' : '')}
-        <div class="meta"><span>${p.status === '검토중' ? '선생님 확인 중' : `+${p.points}점`}</span><span>${fmtTime(p.time)}</span></div></div></div>`;
+        <div class="meta"><span>${p.status === '검토중' ? (p.type === '공모전' ? '심사 중' : '선생님 확인 중') : `+${p.points}점`}</span><span>${fmtTime(p.time)}</span></div></div></div>`;
   app.innerHTML = `
     <div class="bhead"><div><h1>우리 반 미션 게시판</h1><div class="sub">${esc(d.title)} · 완료 ${done}개 · ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 갱신</div></div>
       </div>
     <div class="ranks">${d.leaderboard.map((r, i) => `<div class="rank ${i === 0 && r.points > 0 ? 'top' : ''}"><b>${i + 1}</b><span>${esc(r.team)}</span><em>${r.points}점 · ${r.done}개</em></div>`).join('')}</div>
     <div class="chips"><button class="chip ${S.bfilter ? '' : 'on'}" onclick="setBoardFilter('')">전체</button>
+      ${d.posts.some(p => p.award) ? `<button class="chip ${S.bfilter === '__award' ? 'on' : ''}" onclick="setBoardFilter('__award')">🏆 수상작</button>` : ''}
       ${d.missions.map(m => `<button class="chip ${S.bfilter === m.id ? 'on' : ''}" onclick="setBoardFilter('${esc(m.id)}')">${esc(m.title)}</button>`).join('')}</div>
     ${posts.length ? `<div class="wall">${posts.map(card).join('')}</div>` : '<div class="empty">아직 올라온 미션이 없어요. 첫 도장을 찍어 보세요!</div>'}
     <p class="foot">${esc(COPYRIGHT)}<br>${S.team ? '<button onclick="backToStudent()">우리 모둠 화면으로</button>' : '<button onclick="backToStudent()">미션 하러 가기</button>'} · <button onclick="goTeacher()">교사용</button></p>`;
