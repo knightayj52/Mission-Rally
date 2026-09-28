@@ -52,6 +52,7 @@
     min-height: 52px; padding: 0 22px; border-radius: 14px; border: 0;
     background: var(--forest); color: #fff; font-family: var(--display); font-size: 20px;
   }
+  a.btn { text-decoration: none; }
   .btn.sun { background: var(--sun); color: var(--ink); }
   .btn.ghost { background: transparent; color: var(--forest); border: 2px solid var(--forest); }
   .btn.small { min-height: 40px; padding: 0 14px; font-size: 16px; border-radius: 10px; }
@@ -232,6 +233,24 @@
   .contest-row span { font-size: 14px; color: var(--ink-2); }
   .contest-row .btn { margin-left: auto; }
 
+  /* ── 마감 시계 · 행사 종료 · 전송 대기 ── */
+  .clock { display: flex; align-items: center; gap: 10px; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 10px 14px; margin: -8px 0 16px; font-size: 15px; }
+  .clock b { font-family: var(--display); font-size: 22px; font-weight: 400; color: var(--forest); min-width: 64px; }
+  .clock.soon b { color: var(--coral); } .clock.over { color: var(--ink-2); }
+  .banner { background: #FBE3DB; color: #8A2E17; border-radius: 14px; padding: 12px 14px; margin: 0 0 14px; font-size: 15px; }
+  .seal.queued { border-color: var(--ink-2); color: var(--ink-2); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px var(--ink-2); font-size: 14px; }
+  .mimg { width: 100%; max-height: 260px; object-fit: cover; border-radius: 12px; border: 2px solid var(--line); margin: 0 0 10px; background: var(--paper-2); }
+
+  /* ── 내 행사 ── */
+  .ev { background: #fff; border: 2px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .ev.new { border-color: var(--sun); box-shadow: 0 0 0 3px #FFF1BF; }
+  .ev .et { font-family: var(--display); font-size: 21px; color: var(--forest); line-height: 1.2; }
+  .ev .em { font-size: 15px; color: var(--ink-2); margin: 4px 0 10px; }
+  .ev .em b { color: var(--ink); letter-spacing: .05em; }
+  .ev .eb { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ev .eb .btn { min-height: 46px; font-size: 17px; }
+  .ev .el { font-size: 13px; color: var(--ink-2); margin-top: 8px; word-break: break-all; }
+
   /* ── QR 인쇄 ── */
   .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .qr-card { border: 2px solid var(--ink); border-radius: 14px; padding: 16px; text-align: center; page-break-inside: avoid; background: #fff; }
@@ -331,7 +350,7 @@ function stopPolling() { clearInterval(S.timers.student); clearInterval(S.timers
 function missionStatus(id) {
   const subs = S.mine.filter(s => s.missionId === id);
   if (subs.some(s => s.status === '완료' || s.status === '승인')) return 'done';
-  if (subs.some(s => s.status === '검토중')) return 'pending';
+  if (subs.some(s => s.status === '검토중' || s.status === '전송대기')) return 'pending';
   if (subs.some(s => s.status === '오답' || s.status === '반려')) return 'wrong';
   return 'todo';
 }
@@ -365,6 +384,68 @@ function leaveEvent() {
   history.replaceState(null, '', location.pathname); renderStart();
 }
 
+/* ───────── 내 행사 (구글 로그인 후) ───────── */
+function goMine() { store.sget('rally.sid') ? renderMine() : startGoogle(); }
+async function renderMine(highlight = '') {
+  stopPolling(); S.view = 'mine';
+  app.innerHTML = `<div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1><p class="notice">불러오는 중…</p></div>`;
+  let d;
+  try { d = await api({ action: 'my_events', sid: store.sget('rally.sid') }); }
+  catch (e) {
+    if (/SESSION_EXPIRED/.test(e.message)) {
+      store.sdel('rally.sid');
+      app.innerHTML = `<div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1></div>
+        <div class="msg">로그인한 지 30분이 지났어요. 다시 로그인해 주세요.</div>
+        <button class="btn block" id="gBtn" onclick="startGoogle()">Google로 시작하기</button>${footer()}`;
+    } else renderFatal(e);
+    return;
+  }
+  const appBase = location.origin + location.pathname;
+  const cards = d.events.map(ev => `
+    <div class="ev ${ev.code === highlight ? 'new' : ''}">
+      <div class="et">${esc(ev.title)} ${ev.code === highlight ? '<span class="tag pending">방금 만듦</span>' : ''}</div>
+      <div class="em">코드 <b>${esc(ev.code)}</b> · 비밀번호 <b>${esc(ev.pw || '?')}</b> · ${esc(ev.created)}</div>
+      ${ev.ok ? `<div class="eb">
+          <button class="btn small" onclick="openEventDashboard('${esc(ev.code)}','${esc(ev.pw)}')">현황판 열기</button>
+          <a class="btn small ghost" href="${esc(ev.url)}" target="_blank" rel="noopener">시트 열기</a></div>
+        <div class="el">학생용 링크 <code style="user-select:all">${esc(appBase + '?e=' + ev.code)}</code>
+          <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appBase + '?e=' + ev.code)}')">복사</button></div>`
+      : `<div class="el">행사 시트를 찾을 수 없어요(드라이브에서 지웠을 수 있어요).</div>`}
+    </div>`).join('');
+  app.innerHTML = `
+    <div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1><p class="notice">${esc(d.email)} 계정으로 만든 행사예요.</p></div>
+    ${cards || '<div class="msg">아직 만든 행사가 없어요. 아래에서 첫 행사를 만들어 보세요.</div>'}
+    <div class="ticket">
+      <h2 style="font-size:22px;color:var(--forest)">새 행사 만들기</h2>
+      <label class="field"><span>행사 이름</span><input id="newTitle" maxlength="60" placeholder="예: 2026 가을 경남수목원 체험학습"></label>
+      <button class="btn sun block" id="newBtn" onclick="createEventFromApp()">새 행사 만들기</button>
+      <p style="margin:10px 0 0;font-size:14px;color:var(--ink-2)">선생님 드라이브에 미션 시트와 사진 폴더가 생기고, 행사 코드와 비밀번호가 나와요.</p>
+    </div>
+    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="leaveEvent()">처음 화면으로</button></p>`;
+}
+async function createEventFromApp() {
+  const title = $('#newTitle').value.trim();
+  if (!title) { toast('행사 이름을 써 주세요'); return; }
+  const btn = $('#newBtn'); btn.disabled = true; btn.textContent = '만드는 중… (10초쯤 걸려요)';
+  try {
+    const r = await api({ action: 'create_event', sid: store.sget('rally.sid'), title, n: Math.random().toString(36).slice(2) + Date.now() });
+    toast(`새 행사 ${r.code}을(를) 만들었어요`);
+    renderMine(r.code);
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '새 행사 만들기';
+    if (/SESSION_EXPIRED/.test(e.message)) { store.sdel('rally.sid'); renderMine(); } else toast(e.message);
+  }
+}
+async function openEventDashboard(code, pw) {
+  if (code !== store.get('rally.event')) { store.del('rally.team'); store.del('rally.pin'); S.team = ''; S.pin = ''; }
+  S.event = code; store.set('rally.event', code);
+  if (pw) store.sset('rally.pw.' + code, pw);
+  S.teacherPw = '';
+  history.replaceState(null, '', appLink());
+  renderLoading();
+  try { S.boot = await api({ action: 'bootstrap' }); goTeacher(); } catch (e) { renderFatal(e); }
+}
+
 /* ───────── 화면: 시작(행사 코드 / 선생님 시작) ───────── */
 function renderStart(err = '') {
   S.view = 'start';
@@ -388,7 +469,7 @@ function renderStart(err = '') {
     S.event = v; store.set('rally.event', v); boot();
   };
   $('#ev').addEventListener('keydown', e => { if (e.key === 'Enter') $('#evBtn').click(); });
-  $('#gBtn').onclick = startGoogle;
+  $('#gBtn').onclick = goMine;
 }
 async function startGoogle() {
   const btn = $('#gBtn'); if (btn) { btn.disabled = true; btn.textContent = '준비 중…'; }
@@ -444,6 +525,8 @@ async function refreshStudent(first = false) {
     const d = await api({ action: 'state', team: S.team, pin: S.pin });
     if (!Array.isArray(d.mine)) throw new Error('서버 응답이 예상과 달라요: ' + JSON.stringify(d).slice(0, 160));
     S.mine = d.mine; S.board = d.leaderboard || [];
+    applyQueue();
+    if (readQueue().some(x => x.event === S.event && x.team === S.team)) setTimeout(flushQueue, 500);
     if (first) {
       const code = new URL(location.href).searchParams.get('code');
       if (code) { S.codeFromQR = code; history.replaceState(null, '', location.pathname); }
@@ -469,12 +552,15 @@ function renderHome() {
       <div class="score"><b>${myPoints()}<small>점</small></b><span>우리 모둠 점수</span></div>
     </div>
     <div class="trail" aria-label="진행률 ${pct}%"><i style="width:${pct}%"></i></div>
+    ${S.boot.closed ? '<div class="banner">이 행사는 끝났어요. 이제 제출할 수 없어요. 수고했어요!</div>' : ''}
+    <div id="clock"></div>
     <div class="stamps">
       ${ms.map((m, i) => {
         const st = missionStatus(m.id);
         const aw = m.contest ? myAward(m.id) : '';
         const seal = st === 'done' ? `<div class="seal ${S.pressed === m.id ? 'press' : ''}">${aw ? esc(aw) : '완료'}</div>`
-                   : st === 'pending' ? `<div class="seal wait">${m.contest ? '출품' : '검토중'}</div>` : '';
+                   : st === 'pending' ? (S.mine.some(x => x.missionId === m.id && x.status === '전송대기')
+                       ? `<div class="seal queued">전송 대기</div>` : `<div class="seal wait">${m.contest ? '출품' : '검토중'}</div>`) : '';
         return `<button class="stamp ${st}" onclick="openMission('${esc(m.id)}')">
           <span class="no">${i + 1}</span><span class="pts">${m.contest ? '🏆 공모전' : m.points + '점'}</span>
           <span class="title">${esc(m.title)}</span>
@@ -487,6 +573,7 @@ function renderHome() {
     <div class="actions" style="margin-top:16px"><button class="btn ghost block" onclick="goBoard()">우리 반 미션 게시판 보기</button></div>
     <p class="foot">${esc(COPYRIGHT)}<br><button onclick="logout()">모둠 바꾸기</button> · <button onclick="goTeacher()">교사용</button> · <button onclick="leaveEvent()">다른 행사</button></p>`;
   S.pressed = null;
+  renderClock();
   // QR로 들어온 경우: 해당 코드가 필요한 첫 미완료 미션 자동 열기
   if (S.codeFromQR) {
     const target = ms.find(m => m.needCode && missionStatus(m.id) !== 'done');
@@ -494,6 +581,24 @@ function renderHome() {
     S.codeFromQR = null;
   }
 }
+
+function nextDeadline() {
+  const ds = (S.boot && S.boot.deadlines) || []; if (!ds.length) return null;
+  const now = new Date();
+  const list = ds.map(d => { const [h, mi] = d.time.split(':').map(Number); const t = new Date(now); t.setHours(h, mi, 0, 0); return { label: d.label, at: t }; })
+    .sort((a, b) => a.at - b.at);
+  return list.find(d => d.at > now) || Object.assign(list[list.length - 1], { over: true });
+}
+function renderClock() {
+  const el = $('#clock'); if (!el) return;
+  const d = nextDeadline();
+  if (!d) { el.innerHTML = ''; return; }
+  const diff = Math.round((d.at - Date.now()) / 60000);
+  if (d.over) { el.innerHTML = `<div class="clock over"><b>끝</b><span>${esc(d.label)} 시간이 지났어요</span></div>`; return; }
+  const t = diff >= 60 ? `${Math.floor(diff / 60)}시간 ${diff % 60}분` : `${diff}분`;
+  el.innerHTML = `<div class="clock ${diff <= 10 ? 'soon' : ''}"><b>${t}</b><span>⏰ ${esc(d.label)}까지 (${d.at.getHours()}:${String(d.at.getMinutes()).padStart(2, '0')})</span></div>`;
+}
+setInterval(() => { if (S.view === 'home') renderClock(); }, 30000);
 
 /* ───────── 화면: 미션 시트 ───────── */
 let draft = { answer: '', choice: '', photo: '', code: '' };
@@ -514,17 +619,20 @@ function renderSheet(m, err = '') {
     body = st === 'done'
       ? (m.contest && last?.award ? `<div class="msg ok">${awardBadge(last.award)} 수상을 축하해요! +${last.points}점</div>`
                                   : `<div class="msg ok">완료한 미션이에요. ${last?.points ? `+${last.points}점` : ''}</div>`)
-      : (m.contest ? `<div class="msg">출품 완료! 담임선생님이 심사하고 있어요.</div>`
+      : (last && last.status === '전송대기' ? `<div class="msg">📡 신호가 약해서 아직 못 보냈어요. 신호가 잡히면 자동으로 보내요. (다른 미션을 계속해도 돼요)</div>`
+      : m.contest ? `<div class="msg">출품 완료! 담임선생님이 심사하고 있어요.</div>`
                    : `<div class="msg">선생님이 확인 중이에요. 잠시 뒤 도장이 찍혀요.</div>`);
     if (last?.photo) body += `<div class="photo-box"><img src="${esc(last.photo)}" alt="제출한 사진"></div>`;
     if (last?.answer && m.type !== '장소인증') body += `<div class="desc">${esc(last.answer)}</div>`;
-    if (st === 'pending' && (isPhotoType(m) || m.type === '기록'))
+    if (st === 'pending' && last && last.status !== '전송대기' && (isPhotoType(m) || m.type === '기록'))
       body += `<div class="actions"><button class="btn ghost block" onclick="startEdit('${esc(m.id)}')">✏️ ${m.contest ? '작품 바꾸기' : '수정하기'}</button></div>
         <p class="hint">${m.contest ? '심사 전까지 사진과 제목을 바꿀 수 있어요.' : '선생님이 확인하기 전까지 고칠 수 있어요.'}</p>`;
     else if (canRetake)
       body += `<div class="actions"><button class="btn ghost block" onclick="startEdit('${esc(m.id)}')">📷 다시 찍기</button></div>
         <p class="hint">더 잘 나온 사진이 있으면 바꿀 수 있어요. 도장과 점수는 그대로예요.</p>`;
     else if (st === 'done') body += `<p class="hint">완료된 미션을 고치려면 선생님께 말씀하세요.</p>`;
+  } else if (S.boot.closed) {
+    body = '<div class="banner">행사가 끝나서 이 미션은 더 이상 제출할 수 없어요.</div>';
   } else {
     if (editing) body += `<div class="msg">제출한 내용을 고치고 있어요. ${isPhotoType(m) ? '사진을 다시 찍지 않으면 원래 사진이 유지돼요.' : ''}</div>`;
     if (st === 'wrong' && last) body += `<div class="msg err">${last.status === '반려' ? '다시 해 보세요.' : '아쉽지만 정답이 아니에요. 다시 도전!'}${last.note ? ' — ' + esc(last.note) : ''}</div>`;
@@ -537,7 +645,7 @@ function renderSheet(m, err = '') {
     if (m.type === '기록') body += `<label class="field"><span>관찰한 내용</span><textarea id="answer" placeholder="본 것, 들은 것, 느낀 것을 적어요">${esc(draft.answer)}</textarea></label>`;
     if (isPhotoType(m)) body += `<div class="photo-box">
         ${draft.photo ? `<img src="${draft.photo}" alt="찍은 사진">` : (editing && last?.photo ? `<img src="${esc(last.photo)}" alt="원래 사진">` : '')}
-        <label class="btn ghost">${draft.photo ? '다시 찍기' : '📷 사진 찍기'}<input type="file" accept="image/*" capture="environment" onchange="onPhoto(this)"></label>
+        <label class="btn ghost">${draft.photo ? '다시 고르기' : '📷 사진 찍기 / 고르기'}<input type="file" accept="image/*" onchange="onPhoto(this)"></label>
         <label class="field"><span>${m.contest ? '작품 제목' : '한 줄 설명 (선택)'}</span><input id="answer" value="${esc(draft.answer)}" placeholder="${m.contest ? '우리 작품의 제목을 지어 주세요' : '어디에서 무엇을 찍었나요?'}"></label></div>`;
     if (err) body += `<div class="msg err">${esc(err)}</div>`;
     body += `<div class="actions"><button class="btn sun block" id="submitBtn" onclick="submitMission('${esc(m.id)}')">${editing ? '수정 완료' : m.type === '장소인증' ? '도착 도장 찍기' : m.contest ? '출품하기' : '제출하기'}</button>
@@ -546,6 +654,7 @@ function renderSheet(m, err = '') {
   const html = `<div class="sheet-bg" id="sheet" onclick="if(event.target===this)closeMission()"><div class="sheet" role="dialog" aria-modal="true">
     <div class="sheet-head"><h2>${esc(m.title)}</h2><button class="close" aria-label="닫기" onclick="closeMission()">×</button></div>
     <div class="meta"><span>${esc(TYPE_LABEL[m.type] || m.type)}</span>${m.place ? `<span>📍 ${esc(m.place)}</span>` : ''}<span>${m.contest ? '대상 ' + m.points + '점' : m.points + '점'}</span></div>
+    ${m.image ? `<img class="mimg" src="${esc(m.image)}" alt="미션 예시" loading="lazy">` : ''}
     <div class="desc">${esc(m.desc)}</div>${m.hint ? `<p class="hint">힌트: ${esc(m.hint)}</p>` : ''}
     ${m.contest && m.awards ? `<div class="awardtbl">${m.awards.map(a => `<span>${esc(a.name)} ${a.points}점</span>`).join('')}</div>` : ''}
     ${body}</div></div>`;
@@ -579,6 +688,45 @@ function startEdit(id) {
   renderSheet(m);
 }
 function cancelEdit(id) { S.editing = null; renderSheet(S.boot.missions.find(x => x.id === id)); }
+/* ───────── 전송 실패 자동 재시도 ───────── */
+function readQueue() { try { return JSON.parse(localStorage.getItem('rally.queue') || '[]'); } catch { return []; } }
+function writeQueue(q) { try { localStorage.setItem('rally.queue', JSON.stringify(q)); return true; } catch { return false; } }
+function queueSubmission(payload) {
+  const q = readQueue().filter(x => !(x.event === S.event && x.team === S.team && x.missionId === payload.missionId));
+  q.push(Object.assign({ event: S.event, queuedAt: Date.now() }, payload));
+  return writeQueue(q);
+}
+function applyQueue() {
+  readQueue().filter(x => x.event === S.event && x.team === S.team).forEach(x => {
+    if (!S.mine.some(y => y.missionId === x.missionId && (y.status === '완료' || y.status === '승인' || y.status === '검토중' || y.status === '전송대기')))
+      S.mine.push({ missionId: x.missionId, status: '전송대기', points: 0, answer: x.answer || '', photo: x.photo || '', time: new Date(x.queuedAt).toISOString(), note: '', award: '' });
+  });
+}
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !S.team) return;
+  const q = readQueue(); if (!q.length) return;
+  flushing = true;
+  try {
+    for (const item of q) {
+      if (item.event !== S.event || item.team !== S.team) continue;
+      const { event, queuedAt, ...payload } = item;
+      let r;
+      try { r = await api(Object.assign({}, payload, { pin: S.pin })); }
+      catch (e) { if (isNetworkError(e)) break; r = { ok: false, error: e.message }; }
+      writeQueue(readQueue().filter(x => !(x.event === item.event && x.team === item.team && x.missionId === item.missionId)));
+      const m = S.boot.missions.find(x => x.id === item.missionId);
+      if (r.ok) toast(`📡 ${m ? m.title : '미션'} 보냈어요!` + (r.status === '완료' ? ` +${r.points}점` : ''));
+      else toast(`${m ? m.title : '미션'}: ${r.error}`);
+      S.mine = S.mine.filter(x => !(x.missionId === item.missionId && x.status === '전송대기'));
+    }
+  } finally { flushing = false; }
+  await refreshStudent(false);
+}
+function isNetworkError(e) { return e instanceof TypeError || /서버 응답을 읽지 못했어요|Failed to fetch|Load failed|NetworkError/i.test(e.message || ''); }
+window.addEventListener('online', () => flushQueue());
+setInterval(() => { if (S.view === 'home' && readQueue().length) flushQueue(); }, 20000);
+
 async function submitMission(id) {
   const m = S.boot.missions.find(x => x.id === id);
   grabDraft();
@@ -609,7 +757,16 @@ async function submitMission(id) {
     else S.mine.push(entry);
     renderHome();
     refreshStudent(false);
-  } catch (e) { renderSheet(m, e.message); }
+  } catch (e) {
+    if (isNetworkError(e) && !isEdit) {
+      if (queueSubmission(payload)) {
+        toast('📡 신호가 약해요. 신호가 잡히면 자동으로 보낼게요', 3500);
+        S.editing = null; closeMission();
+        S.mine.push({ missionId: id, status: '전송대기', points: 0, answer: payload.answer || '', photo: payload.photo || '', time: new Date().toISOString(), note: '', award: '' });
+        renderHome();
+      } else renderSheet(m, '신호가 약하고 저장 공간도 부족해요. 잠시 뒤 다시 눌러 주세요.');
+    } else renderSheet(m, e.message);
+  }
 }
 
 /* ───────── 교사 현황판 ───────── */
@@ -627,7 +784,7 @@ function renderTeacherLogin(err = '') {
     <button class="btn block" id="pwBtn">들어가기</button></div>
     <div class="ticket" style="margin-top:14px">
       <p style="margin:0 0 10px;color:var(--ink-2);font-size:15px">비밀번호를 모르거나, 다른 행사를 열거나, <b>새 행사를 만들려면</b></p>
-      <button class="btn ghost block" id="gBtn" onclick="startGoogle()">Google로 내 행사 열기</button>
+      <button class="btn ghost block" id="gBtn" onclick="goMine()">Google로 내 행사 열기</button>
     </div>
     <p class="foot">${esc(COPYRIGHT)}<br><button onclick="backToStudent()">학생 화면으로</button> · <button onclick="leaveEvent()">다른 행사 코드 입력</button></p>`;
   $('#pwBtn').onclick = () => { S.teacherPw = $('#pw').value; refreshTeacher(true); };
@@ -685,16 +842,38 @@ function renderTeacher() {
       <button class="btn small ghost" onclick="renderPrint()">QR·코드 인쇄</button>
       <a class="btn small ghost" href="${esc(appLink('mode=board'))}" target="_blank" rel="noopener">게시판 열기</a>
       ${d.sheetUrl ? `<a class="btn small ghost" href="${esc(d.sheetUrl)}" target="_blank" rel="noopener">내 시트 열기</a>` : ''}
-      <button class="btn small ghost" onclick="backToStudent()">학생 화면</button></div>
+      <button class="btn small ghost" onclick="backToStudent()">학생 화면</button>
+      <button class="btn small ghost" onclick="goMine()">내 행사</button>
+      ${d.closed ? `<button class="btn small" onclick="toggleEvent(true)">다시 열기</button>` : `<button class="btn small ghost" style="border-color:var(--coral);color:var(--coral)" onclick="toggleEvent(false)">행사 종료</button>`}</div>
+    ${d.closed ? '<div class="banner">행사가 종료됐어요. 학생 제출과 게시판이 닫히고 사진 공개 링크가 회수됐어요. (선생님 화면에서는 로그인한 구글 계정으로만 사진이 보여요)</div>' : ''}
+    ${d.deadlines && d.deadlines.length ? `<p class="live no-print" style="margin:-6px 0 8px">⏰ 마감: ${d.deadlines.map(x => esc(x.time + ' ' + x.label)).join(' · ')}</p>` : ''}
     <p class="live no-print" style="margin:-6px 0 12px">${S.boot?.autoPhoto ? '📷 사진 자동 승인 켜짐 · ' : ''}행사 코드 <b>${esc(S.event)}</b> · 학생용 링크 <code style="user-select:all">${esc(appLink())}</code> <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appLink())}')">복사</button></p>
-    <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th></tr></thead>
-      <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td></tr>`).join('')}</tbody></table></div>
+    <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th><th>마지막 활동</th></tr></thead>
+      <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td><td>${lastAct(d.lastActivity && d.lastActivity[r.team])}</td></tr>`).join('')}</tbody></table></div>
     <p class="live" style="margin:8px 0 0">${ms.map((m, i) => `${i + 1} ${esc(m.title)}`).join(' · ')}</p>
     ${contestRows ? `<div class="queue"><h2>사진 공모전 심사</h2>${contestRows}</div>` : ''}
     <div class="queue"><h2>검토 대기 ${pending.length}건</h2>
       ${pending.length ? pending.map(s => card(s, true)).join('') : '<div class="msg">지금은 확인할 제출이 없어요.</div>'}</div>
     <div class="queue"><h2>최근 기록</h2>${recent.map(s => card(s, false)).join('') || '<div class="msg">아직 제출이 없어요.</div>'}</div>
     <p class="foot">${esc(COPYRIGHT)}</p>`;
+}
+function lastAct(iso) {
+  if (!iso) return '<span class="live">아직 없음</span>';
+  const min = Math.round((Date.now() - new Date(iso)) / 60000);
+  const style = min >= 30 ? 'color:var(--coral);font-weight:700' : '';
+  return `<span style="${style}">${fmtTime(iso)} · ${min < 1 ? '방금' : min + '분 전'}</span>`;
+}
+async function toggleEvent(open) {
+  const msg = open ? '행사를 다시 열까요? 학생 제출과 게시판이 다시 열리고 사진 공개 링크도 복구돼요.'
+                   : '행사를 종료할까요?\n· 학생은 더 이상 제출할 수 없어요\n· 학생 게시판이 닫혀요\n· 사진의 공개 링크가 모두 회수돼요\n(언제든 다시 열 수 있어요)';
+  if (!confirm(msg)) return;
+  toast(open ? '여는 중…' : '종료하는 중… (사진이 많으면 조금 걸려요)', 5000);
+  try {
+    const r = await api({ action: open ? 'reopen_event' : 'close_event', pw: S.teacherPw });
+    toast(open ? '행사를 다시 열었어요' : `행사를 종료했어요. 사진 ${r.photos}장 비공개`);
+    S.boot = await api({ action: 'bootstrap' });
+    await refreshTeacher(false);
+  } catch (e) { toast(e.message); }
 }
 function copyText(t) { navigator.clipboard?.writeText(t).then(() => toast('복사했어요'), () => toast('길게 눌러 복사하세요')); }
 /* ───────── 사진 공모전 심사 ───────── */
@@ -770,7 +949,7 @@ S.bseen = null;
 function goBoard() { stopPolling(); S.view = 'board'; history.replaceState(null, '', appLink('mode=board')); refreshBoard(true); }
 async function refreshBoard(first = false) {
   try {
-    const d = await api({ action: 'board' });
+    const d = await api({ action: 'board', pw: S.teacherPw || store.sget('rally.pw.' + S.event) || '' });
     S.bdata = d;
     if (S.view === 'board') renderBoard();
     if (first) { clearInterval(S.timers.board); S.timers.board = setInterval(() => refreshBoard(false), CONFIG.STUDENT_POLL); }
@@ -778,6 +957,11 @@ async function refreshBoard(first = false) {
 }
 function renderBoard() {
   const d = S.bdata;
+  if (d.closed) {
+    app.innerHTML = `<div class="hero"><p class="kicker">우리 반 미션 게시판</p><h1>${esc(d.title)}</h1><p class="notice">행사가 끝나서 게시판이 닫혔어요. 함께해서 즐거웠어요!</p></div>
+      <p class="foot">${esc(COPYRIGHT)}<br><button onclick="backToStudent()">처음으로</button> · <button onclick="goTeacher()">교사용</button></p>`;
+    return;
+  }
   const mTitle = id => (d.missions.find(m => m.id === id) || {}).title || id;
   const rank = p => AWARD_NAMES.indexOf(p.award);
   const posts = S.bfilter === '__award' ? d.posts.filter(p => p.award).sort((a, b) => rank(a) - rank(b))
@@ -819,6 +1003,13 @@ function renderPrint() {
 
 /* ───────── 시작 ───────── */
 async function boot() {
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('sid')) {
+    store.sset('rally.sid', qs.get('sid'));
+    qs.delete('sid'); history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : ''));
+    S.event = store.get('rally.event');
+    return renderMine();
+  }
   S.event = resolveEvent();
   const hp = new URLSearchParams(location.hash.slice(1)).get('pw');
   if (hp && S.event) { store.sset('rally.pw.' + S.event, hp); S.teacherPw = ''; history.replaceState(null, '', location.pathname + location.search); }
