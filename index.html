@@ -461,10 +461,11 @@ async function renderMine(highlight = '') {
   const cards = shown.map(card).join('') + (hiddenEvs.length ? `<details class="hidden-wrap" ${S.showHidden ? 'open' : ''} ontoggle="S.showHidden=this.open"><summary>숨긴 행사 ${hiddenEvs.length}개 보기</summary>${hiddenEvs.map(card).join('')}</details>` : '');
   app.innerHTML = `
     <div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1><p class="notice">${esc(d.email)} 계정으로 만든 행사예요.</p></div>
+    ${store.get('rally.invite') ? `<div class="msg ok">📨 초대 링크로 들어오셨어요. 아래 "새 행사 만들기"에 <b>${esc(store.get('rally.invite'))}</b> 행사 복사가 미리 골라져 있어요. 행사 이름(예: 4학년 1반)만 쓰고 만들기를 누르세요. <button class="btn small ghost" style="min-height:28px;font-size:12px" onclick="store.del('rally.invite');S.src={source:'template',template:''};renderMine()">초대 무시</button></div>` : ''}
     ${cards || '<div class="msg">아직 만든 행사가 없어요. 아래에서 첫 행사를 만들어 보세요.</div>'}
     <div class="ticket">
       <h2 style="font-size:22px;color:var(--forest)">새 행사 만들기</h2>
-      <label class="field"><span>행사 이름</span><input id="newTitle" maxlength="60" placeholder="예: 2026 가을 경남수목원 체험학습"></label>
+      <label class="field"><span>행사 이름</span><input id="newTitle" maxlength="60" placeholder="${store.get('rally.invite') ? '예: 2026 가을 경남수목원 체험학습 (4학년 1반)' : '예: 2026 가을 경남수목원 체험학습'}"></label>
       <label class="field"><span>모둠 수</span><input id="newTeams" inputmode="numeric" value="6" style="max-width:120px"></label>
       <p style="margin:6px 0 4px;font-size:15px;color:var(--ink-2)">미션은 어떻게 채울까요?</p>
       ${sourcePicker(d)}
@@ -474,8 +475,14 @@ async function renderMine(highlight = '') {
     <p class="foot">${esc(COPYRIGHT)}<br><button onclick="leaveEvent()">처음 화면으로</button></p>`;
 }
 S.src = { source: 'template', template: '' };
+function applyInvite() {
+  const inv = store.get('rally.invite');
+  if (inv && !S.src.from) S.src = { source: 'copy', template: '', from: inv, copyTeams: true };
+  return inv;
+}
 function sourcePicker(d) {
   const tpls = d.templates || [];
+  applyInvite();
   if (S.src.source === 'template' && !S.src.template && tpls.length) S.src.template = tpls[0].name;
   if (!tpls.length && S.src.source === 'template') S.src.source = 'sample';
   const opt = (source, template, label, sub) => `<button class="src ${S.src.source === source && (S.src.template || '') === (template || '') ? 'on' : ''}" onclick="pickSource('${esc(source)}','${esc(template || '')}')"><b>${label}</b><small>${sub}</small></button>`;
@@ -503,6 +510,7 @@ async function createEventFromApp() {
   try {
     const r = await api(payload);
     toast(`새 행사 ${r.code}을(를) 만들었어요`);
+    store.del('rally.invite'); S.src = { source: 'template', template: '' };
     renderMine(r.code);
   } catch (e) {
     btn.disabled = false; btn.textContent = '새 행사 만들기';
@@ -552,7 +560,9 @@ function renderStart(err = '') {
     </div>
     <div class="ticket" style="margin-top:14px">
       <h2 style="font-size:22px;color:var(--forest)">선생님이신가요?</h2>
-      <p style="margin:6px 0 10px;color:var(--ink-2);font-size:15px">Google 계정으로 로그인하면 <b>내 행사 목록</b>(행사 코드·비밀번호·현황판)이 나오고, 거기서 <b>새 행사</b>도 만들 수 있어요. 기록은 모두 선생님 드라이브에 저장됩니다.</p>
+      ${store.get('rally.invite') ? `<div class="msg ok">📨 <b>${esc(store.get('rally.invite'))}</b> 행사의 초대 링크로 들어오셨어요. Google로 시작하면 그 행사의 미션·모둠을 그대로 복사한 <b>우리 반 행사</b>가 바로 만들어져요.</div>` : ''}
+      <p style="margin:6px 0 10px;color:var(--ink-2);font-size:15px">Google 계정으로 로그인하면 <b>내 행사 목록</b>(행사 코드·비밀번호·현황판)이 나오고, 거기서 <b>새 행사</b>도 만들 수 있어요. 학생 기록과 사진은 모두 선생님 드라이브에 저장됩니다.</p>
+      <p style="margin:0 0 10px;font-size:13px;color:var(--ink-2)">행사 코드·제목과 로그인 계정은 이 앱 운영자(영쌤클래스)의 관리 시트에 기록돼요. 학생 기록·사진은 기록되지 않으며, 구글 계정 → 보안 → 서드파티 앱에서 언제든 연결을 끊을 수 있어요.</p>
       <button class="btn block" id="gBtn">Google로 시작하기</button>
     </div>
     <p class="foot">${esc(COPYRIGHT)}</p>`;
@@ -982,7 +992,8 @@ function renderTeacher() {
       ${d.closed ? `<button class="btn small" onclick="toggleEvent(true)">다시 열기</button>` : `<button class="btn small ghost" style="border-color:var(--coral);color:var(--coral)" onclick="toggleEvent(false)">행사 종료</button>`}</div>
     ${d.closed ? '<div class="banner">행사가 종료됐어요. 학생 제출과 게시판이 닫히고 사진 공개 링크가 회수됐어요. (선생님 화면에서는 로그인한 구글 계정으로만 사진이 보여요)</div>' : ''}
     ${d.deadlines && d.deadlines.length ? `<p class="live no-print" style="margin:-6px 0 8px">⏰ 마감: ${d.deadlines.map(x => esc(x.time + ' ' + x.label)).join(' · ')}</p>` : ''}
-    <p class="live no-print" style="margin:-6px 0 12px">${S.boot?.autoPhoto ? '📷 사진 자동 승인 켜짐 · ' : ''}행사 코드 <b>${esc(S.event)}</b> · 학생용 링크 <code style="user-select:all">${esc(appLink())}</code> <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appLink())}')">복사</button></p>
+    <p class="live no-print" style="margin:-6px 0 12px">${S.boot?.autoPhoto ? '📷 사진 자동 승인 켜짐 · ' : ''}행사 코드 <b>${esc(S.event)}</b> · 학생용 링크 <code style="user-select:all">${esc(appLink())}</code> <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appLink())}')">복사</button>
+      · <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyInvite()">동료 초대 링크 복사</button></p>
     <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th><th>마지막 활동</th></tr></thead>
       <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td><td>${lastAct(d.lastActivity && d.lastActivity[r.team])}</td></tr>`).join('')}</tbody></table></div>
     <p class="live" style="margin:8px 0 0">${ms.map((m, i) => `${i + 1} ${esc(m.title)}`).join(' · ')}</p>
@@ -1033,6 +1044,11 @@ async function toggleEvent(open) {
     S.boot = await api({ action: 'bootstrap' });
     await refreshTeacher(false);
   } catch (e) { toast(e.message); }
+}
+function copyInvite() {
+  const link = location.origin + location.pathname + '?copy=' + S.event;
+  const text = `[미션 랠리 초대] 아래 링크를 열고 "Google로 시작하기" → "내 행사 열기" → 행사 이름(반 이름)만 쓰고 "새 행사 만들기"를 누르면, 제 행사(${S.event})의 미션과 모둠이 복사된 우리 반 행사가 만들어져요.\n${link}`;
+  navigator.clipboard?.writeText(text).then(() => toast('초대 안내문을 복사했어요. 카톡에 붙여넣으세요'), () => prompt('복사하세요', text));
 }
 function copyText(t) { navigator.clipboard?.writeText(t).then(() => toast('복사했어요'), () => toast('길게 눌러 복사하세요')); }
 /* ───────── 사진 공모전 심사 ───────── */
@@ -1179,6 +1195,7 @@ function renderPrint() {
 /* ───────── 시작 ───────── */
 async function boot() {
   const qs = new URLSearchParams(location.search);
+  if (qs.get('copy')) { store.set('rally.invite', qs.get('copy').trim().toUpperCase()); qs.delete('copy'); history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : '')); return renderStart(); }
   if (qs.get('sid')) {
     store.sset('rally.sid', qs.get('sid'));
     qs.delete('sid'); history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : ''));
