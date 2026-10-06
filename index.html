@@ -276,6 +276,15 @@
   .seal.queued { border-color: var(--ink-2); color: var(--ink-2); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px var(--ink-2); font-size: 14px; }
   .mimg { width: 100%; max-height: 260px; object-fit: cover; border-radius: 12px; border: 2px solid var(--line); margin: 0 0 10px; background: var(--paper-2); }
 
+  /* ── 학생용 QR ── */
+  .qrbox { text-align: center; padding: 10px 0; }
+  .qrbox .qr { display: inline-block; background: #fff; padding: 14px; border-radius: 16px; border: 2px solid var(--line); }
+  .qrbox .qr img, .qrbox .qr canvas { display: block; }
+  .qrbox .big { font-family: var(--display); font-size: 30px; color: var(--forest); margin: 12px 0 2px; }
+  .qrbox .code { font-family: var(--display); font-size: 22px; letter-spacing: .15em; }
+  .qrbox .lnk { font-size: 13px; color: var(--ink-2); word-break: break-all; margin: 8px 0; }
+  @media print { .qrbox { padding-top: 60px; } .qrbox .qr { border: 0; } .qrbox .big { font-size: 40px; } }
+
   /* ── 내 행사 ── */
   .ev { background: #fff; border: 2px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
   .ev.new { border-color: var(--sun); box-shadow: 0 0 0 3px #FFF1BF; }
@@ -301,6 +310,8 @@
   .qr-card .how { font-size: 13px; color: var(--ink-2); }
   @media print {
     body { background: #fff; } .app { padding: 0; max-width: none; }
+    body.print-sheet .app > *:not(.sheet-bg) { display: none !important; }
+    body.print-sheet .sheet-bg { position: static; background: none; display: block; } body.print-sheet .sheet { max-height: none; border: 0; padding: 0; }
     .no-print, .toast, .foot { display: none !important; }
     .print-grid { grid-template-columns: repeat(2, 1fr); }
   }
@@ -449,7 +460,8 @@ async function renderMine(highlight = '') {
           <button class="btn small" onclick="openEventDashboard('${esc(ev.code)}','${esc(ev.pw)}')">현황판 열기</button>
           <a class="btn small ghost" href="${esc(ev.url)}" target="_blank" rel="noopener">시트 열기</a></div>
         <div class="el">학생용 링크 <code style="user-select:all">${esc(appBase + '?e=' + ev.code)}</code>
-          <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appBase + '?e=' + ev.code)}')">복사</button></div>`
+          <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appBase + '?e=' + ev.code)}')">복사</button>
+          <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="showStudentQR('${esc(ev.code)}','${esc(ev.title)}')">학생용 QR</button></div>`
       : `<div class="el">행사 시트를 찾을 수 없어요(드라이브에서 지웠을 수 있어요).</div>`}
       <div class="more">
         <button onclick="renameEvent('${esc(ev.code)}','${esc(ev.title)}')">이름 바꾸기</button>
@@ -722,7 +734,7 @@ function openMission(id, prefillCode = '') {
   S.open = id; draft = { answer: '', choice: '', photo: '', code: prefillCode };
   renderSheet(m);
 }
-function closeMission() { S.open = null; S.editing = null; const bg = $('#sheet'); if (bg) bg.remove(); }
+function closeMission() { S.open = null; S.editing = null; document.body.classList.remove('print-sheet'); const bg = $('#sheet'); if (bg) bg.remove(); }
 function renderSheet(m, err = '') {
   const st = missionStatus(m.id);
   const last = S.mine.filter(s => s.missionId === m.id).slice(-1)[0];
@@ -993,6 +1005,7 @@ function renderTeacher() {
     ${d.closed ? '<div class="banner">행사가 종료됐어요. 학생 제출과 게시판이 닫히고 사진 공개 링크가 회수됐어요. (선생님 화면에서는 로그인한 구글 계정으로만 사진이 보여요)</div>' : ''}
     ${d.deadlines && d.deadlines.length ? `<p class="live no-print" style="margin:-6px 0 8px">⏰ 마감: ${d.deadlines.map(x => esc(x.time + ' ' + x.label)).join(' · ')}</p>` : ''}
     <p class="live no-print" style="margin:-6px 0 12px">${S.boot?.autoPhoto ? '📷 사진 자동 승인 켜짐 · ' : ''}행사 코드 <b>${esc(S.event)}</b> · 학생용 링크 <code style="user-select:all">${esc(appLink())}</code> <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appLink())}')">복사</button>
+      · <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="showStudentQR(S.event, S.boot?.title || '')">학생용 QR</button>
       · <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyInvite()">동료 초대 링크 복사</button></p>
     <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th><th>마지막 활동</th></tr></thead>
       <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td><td>${lastAct(d.lastActivity && d.lastActivity[r.team])}</td></tr>`).join('')}</tbody></table></div>
@@ -1047,6 +1060,35 @@ async function toggleEvent(open) {
     S.boot = await api({ action: 'bootstrap' });
     await refreshTeacher(false);
   } catch (e) { toast(e.message); }
+}
+// QR 그리기: 라이브러리가 있으면 로컬 생성, 없으면 QR 이미지 서비스로 대체
+function drawQR(el, text, size) {
+  if (typeof QRCode !== 'undefined') { new QRCode(el, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M }); return; }
+  const img = new Image(); img.width = size; img.height = size; img.alt = 'QR';
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size + '&margin=8&data=' + encodeURIComponent(text);
+  img.onerror = () => { el.textContent = 'QR을 만들지 못했어요. 아래 링크를 복사해 쓰세요.'; };
+  el.appendChild(img);
+}
+function showStudentQR(code, title) {
+  const link = location.origin + location.pathname + '?e=' + code;
+  const html = `<div class="sheet-bg" id="sheet" onclick="if(event.target===this)closeMission()"><div class="sheet" role="dialog">
+    <div class="sheet-head no-print"><h2>학생용 QR</h2><button class="close" onclick="closeMission()">×</button></div>
+    <div class="qrbox">
+      <div class="big">${esc(title || '미션 랠리')}</div>
+      <div class="lnk no-print">폰 카메라로 찍으면 바로 열려요. 모둠 선택 → PIN 입력</div>
+      <div class="qr" id="sqr"></div>
+      <div class="code">행사 코드 ${esc(code)}</div>
+      <div class="lnk">${esc(link)}</div>
+      <div class="actions no-print" style="margin-top:12px">
+        <button class="btn block" onclick="window.print()">인쇄하기</button>
+        <button class="btn ghost block" onclick="copyText('${esc(link)}')">링크 복사</button>
+      </div>
+      <p class="hint no-print">교실 TV에 이 화면을 띄워 두면 모둠 폰으로 한 번에 접속할 수 있어요.</p>
+    </div></div></div>`;
+  const old = $('#sheet'); if (old) old.remove();
+  app.insertAdjacentHTML('beforeend', html);
+  document.body.classList.add('print-sheet');
+  drawQR($('#sqr'), link, 260);
 }
 function copyInvite() {
   const link = location.origin + location.pathname + '?copy=' + S.event;
@@ -1191,8 +1233,7 @@ function renderPrint() {
       <div class="qr" id="qr-${i}"></div><div class="code">${esc(m.code)}</div><div class="how">QR을 찍거나 위 숫자를 앱에 입력하세요</div></div>`).join('')}
     ${ms.length ? '' : '<div class="msg">장소코드가 있는 미션이 없어요. 미션 시트의 장소코드 열을 채우세요.</div>'}</div>
     <p class="foot">${esc(COPYRIGHT)}</p>`;
-  if (typeof QRCode === 'undefined') { toast('QR 라이브러리를 불러오지 못했어요. 숫자 코드로 인쇄돼요.'); return; }
-  ms.forEach((m, i) => new QRCode($('#qr-' + i), { text: appLink('code=' + encodeURIComponent(m.code)), width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M }));
+  ms.forEach((m, i) => drawQR($('#qr-' + i), appLink('code=' + encodeURIComponent(m.code)), 180));
 }
 
 /* ───────── 시작 ───────── */
