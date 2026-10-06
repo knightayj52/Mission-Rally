@@ -425,17 +425,17 @@ function leaveEvent() {
 }
 
 /* ───────── 내 행사 (구글 로그인 후) ───────── */
-function goMine() { store.sget('rally.sid') ? renderMine() : startGoogle(); }
+function goMine() { store.get('rally.sid') ? renderMine() : startGoogle(); }
 async function renderMine(highlight = '') {
   stopPolling(); S.view = 'mine';
   app.innerHTML = `<div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1><p class="notice">불러오는 중…</p></div>`;
   let d;
-  try { d = await api({ action: 'my_events', sid: store.sget('rally.sid') }); S.mdata = d; }
+  try { d = await api({ action: 'my_events', sid: store.get('rally.sid') }); S.mdata = d; }
   catch (e) {
     if (/SESSION_EXPIRED/.test(e.message)) {
-      store.sdel('rally.sid');
+      store.del('rally.sid');
       app.innerHTML = `<div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1></div>
-        <div class="msg">로그인한 지 30분이 지났어요. 다시 로그인해 주세요.</div>
+        <div class="msg">로그인한 지 30일이 지났어요. 다시 로그인해 주세요.</div>
         <button class="btn block" id="gBtn" onclick="startGoogle()">Google로 시작하기</button>${footer()}`;
     } else renderFatal(e);
     return;
@@ -502,7 +502,7 @@ function pickSource(source, template) {
 async function createEventFromApp() {
   const title = $('#newTitle').value.trim();
   if (!title) { toast('행사 이름을 써 주세요'); return; }
-  const payload = { action: 'create_event', sid: store.sget('rally.sid'), title, n: Math.random().toString(36).slice(2) + Date.now(),
+  const payload = { action: 'create_event', sid: store.get('rally.sid'), title, n: Math.random().toString(36).slice(2) + Date.now(),
     source: S.src.source, template: S.src.template, from: (S.src.from || '').trim().toUpperCase(), copyTeams: !!S.src.copyTeams,
     teamCount: Number($('#newTeams').value) || 0 };
   if (payload.source === 'copy' && !payload.from) { toast('복사할 행사 코드를 넣어 주세요'); return; }
@@ -514,24 +514,24 @@ async function createEventFromApp() {
     renderMine(r.code);
   } catch (e) {
     btn.disabled = false; btn.textContent = '새 행사 만들기';
-    if (/SESSION_EXPIRED/.test(e.message)) { store.sdel('rally.sid'); renderMine(); } else toast(e.message);
+    if (/SESSION_EXPIRED/.test(e.message)) { store.del('rally.sid'); renderMine(); } else toast(e.message);
   }
 }
 async function renameEvent(code, old) {
   const title = prompt('새 행사 이름', old); if (title === null) return;
   if (!title.trim()) return toast('행사 이름을 써 주세요');
-  try { await api({ action: 'rename_event', sid: store.sget('rally.sid'), code, title: title.trim() }); toast('이름을 바꿨어요'); renderMine(); }
+  try { await api({ action: 'rename_event', sid: store.get('rally.sid'), code, title: title.trim() }); toast('이름을 바꿨어요'); renderMine(); }
   catch (e) { toast(e.message); }
 }
 async function hideEvent(code, hidden) {
-  try { await api({ action: 'hide_event', sid: store.sget('rally.sid'), code, hidden }); toast(hidden ? '숨겼어요. 학생 링크는 그대로 작동해요' : '다시 보여요'); renderMine(); }
+  try { await api({ action: 'hide_event', sid: store.get('rally.sid'), code, hidden }); toast(hidden ? '숨겼어요. 학생 링크는 그대로 작동해요' : '다시 보여요'); renderMine(); }
   catch (e) { toast(e.message); }
 }
 async function deleteEvent(code, title) {
   if (!confirm(`"${title}" (${code}) 행사를 삭제할까요?\n\n· 학생 링크가 더 이상 열리지 않아요\n· 드라이브의 미션 시트와 사진 폴더는 휴지통으로 옮겨져요 (30일 안에 복구 가능)\n\n기록을 남기고 목록에서만 치우려면 "숨기기"를 쓰세요.`)) return;
   if (prompt('정말 삭제하려면 행사 코드를 입력하세요', '') !== code) return toast('코드가 달라서 취소했어요');
   try {
-    const r = await api({ action: 'delete_event', sid: store.sget('rally.sid'), code });
+    const r = await api({ action: 'delete_event', sid: store.get('rally.sid'), code });
     toast(`삭제했어요 (드라이브 ${r.trashed}개 휴지통으로)`);
     if (store.get('rally.event') === code) { store.del('rally.event'); store.del('rally.team'); store.del('rally.pin'); }
     renderMine();
@@ -1200,7 +1200,7 @@ async function boot() {
   const qs = new URLSearchParams(location.search);
   if (qs.get('copy')) { store.set('rally.invite', qs.get('copy').trim().toUpperCase()); qs.delete('copy'); history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : '')); return renderStart(); }
   if (qs.get('sid')) {
-    store.sset('rally.sid', qs.get('sid'));
+    store.set('rally.sid', qs.get('sid'));
     qs.delete('sid'); history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : ''));
     S.event = store.get('rally.event');
     return renderMine();
