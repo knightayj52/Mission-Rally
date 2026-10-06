@@ -285,6 +285,11 @@
   .ev .eb { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .ev .eb .btn { min-height: 46px; font-size: 17px; }
   .ev .el { font-size: 13px; color: var(--ink-2); margin-top: 8px; word-break: break-all; }
+  .ev .more { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--paper-2); }
+  .ev .more button { background: none; border: 0; color: var(--ink-2); font-size: 13px; padding: 4px 6px; text-decoration: underline; }
+  .ev .more button.danger { color: var(--coral); }
+  .ev.hid { opacity: .7; background: var(--paper-2); }
+  .hidden-wrap summary { cursor: pointer; color: var(--ink-2); font-size: 15px; margin: 6px 0 10px; }
 
   /* ── QR 인쇄 ── */
   .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
@@ -436,8 +441,8 @@ async function renderMine(highlight = '') {
     return;
   }
   const appBase = location.origin + location.pathname;
-  const cards = d.events.map(ev => `
-    <div class="ev ${ev.code === highlight ? 'new' : ''}">
+  const card = ev => `
+    <div class="ev ${ev.code === highlight ? 'new' : ''} ${ev.hidden ? 'hid' : ''}">
       <div class="et">${esc(ev.title)} ${ev.code === highlight ? '<span class="tag pending">방금 만듦</span>' : ''}</div>
       <div class="em">코드 <b>${esc(ev.code)}</b> · 비밀번호 <b>${esc(ev.pw || '?')}</b> · ${esc(ev.created)}</div>
       ${ev.ok ? `<div class="eb">
@@ -446,7 +451,14 @@ async function renderMine(highlight = '') {
         <div class="el">학생용 링크 <code style="user-select:all">${esc(appBase + '?e=' + ev.code)}</code>
           <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyText('${esc(appBase + '?e=' + ev.code)}')">복사</button></div>`
       : `<div class="el">행사 시트를 찾을 수 없어요(드라이브에서 지웠을 수 있어요).</div>`}
-    </div>`).join('');
+      <div class="more">
+        <button onclick="renameEvent('${esc(ev.code)}','${esc(ev.title)}')">이름 바꾸기</button>
+        <button onclick="hideEvent('${esc(ev.code)}',${ev.hidden ? 'false' : 'true'})">${ev.hidden ? '다시 보이기' : '숨기기'}</button>
+        <button class="danger" onclick="deleteEvent('${esc(ev.code)}','${esc(ev.title)}')">삭제</button>
+      </div>
+    </div>`;
+  const shown = d.events.filter(e => !e.hidden), hiddenEvs = d.events.filter(e => e.hidden);
+  const cards = shown.map(card).join('') + (hiddenEvs.length ? `<details class="hidden-wrap" ${S.showHidden ? 'open' : ''} ontoggle="S.showHidden=this.open"><summary>숨긴 행사 ${hiddenEvs.length}개 보기</summary>${hiddenEvs.map(card).join('')}</details>` : '');
   app.innerHTML = `
     <div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1><p class="notice">${esc(d.email)} 계정으로 만든 행사예요.</p></div>
     ${cards || '<div class="msg">아직 만든 행사가 없어요. 아래에서 첫 행사를 만들어 보세요.</div>'}
@@ -496,6 +508,26 @@ async function createEventFromApp() {
     btn.disabled = false; btn.textContent = '새 행사 만들기';
     if (/SESSION_EXPIRED/.test(e.message)) { store.sdel('rally.sid'); renderMine(); } else toast(e.message);
   }
+}
+async function renameEvent(code, old) {
+  const title = prompt('새 행사 이름', old); if (title === null) return;
+  if (!title.trim()) return toast('행사 이름을 써 주세요');
+  try { await api({ action: 'rename_event', sid: store.sget('rally.sid'), code, title: title.trim() }); toast('이름을 바꿨어요'); renderMine(); }
+  catch (e) { toast(e.message); }
+}
+async function hideEvent(code, hidden) {
+  try { await api({ action: 'hide_event', sid: store.sget('rally.sid'), code, hidden }); toast(hidden ? '숨겼어요. 학생 링크는 그대로 작동해요' : '다시 보여요'); renderMine(); }
+  catch (e) { toast(e.message); }
+}
+async function deleteEvent(code, title) {
+  if (!confirm(`"${title}" (${code}) 행사를 삭제할까요?\n\n· 학생 링크가 더 이상 열리지 않아요\n· 드라이브의 미션 시트와 사진 폴더는 휴지통으로 옮겨져요 (30일 안에 복구 가능)\n\n기록을 남기고 목록에서만 치우려면 "숨기기"를 쓰세요.`)) return;
+  if (prompt('정말 삭제하려면 행사 코드를 입력하세요', '') !== code) return toast('코드가 달라서 취소했어요');
+  try {
+    const r = await api({ action: 'delete_event', sid: store.sget('rally.sid'), code });
+    toast(`삭제했어요 (드라이브 ${r.trashed}개 휴지통으로)`);
+    if (store.get('rally.event') === code) { store.del('rally.event'); store.del('rally.team'); store.del('rally.pin'); }
+    renderMine();
+  } catch (e) { toast(e.message); }
 }
 async function openEventDashboard(code, pw) {
   if (code !== store.get('rally.event')) { store.del('rally.team'); store.del('rally.pin'); S.team = ''; S.pin = ''; }
