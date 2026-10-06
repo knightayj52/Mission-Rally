@@ -472,7 +472,7 @@ async function renderMine(highlight = '') {
   const shown = d.events.filter(e => !e.hidden), hiddenEvs = d.events.filter(e => e.hidden);
   const cards = shown.map(card).join('') + (hiddenEvs.length ? `<details class="hidden-wrap" ${S.showHidden ? 'open' : ''} ontoggle="S.showHidden=this.open"><summary>숨긴 행사 ${hiddenEvs.length}개 보기</summary>${hiddenEvs.map(card).join('')}</details>` : '');
   app.innerHTML = `
-    <div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1><p class="notice">${esc(d.email)} 계정으로 만든 행사예요.</p></div>
+    <div class="hero"><p class="kicker">선생님</p><h1>내 행사</h1><p class="notice">${esc(d.email)} 계정으로 만든 행사예요. <button class="btn small ghost" style="min-height:26px;font-size:12px;padding:0 8px" onclick="teacherLogout()">계정 바꾸기</button></p></div>
     ${store.get('rally.invite') ? `<div class="msg ok">📨 초대 링크로 들어오셨어요. 아래 "새 행사 만들기"에 <b>${esc(store.get('rally.invite'))}</b> 행사 복사가 미리 골라져 있어요. 행사 이름(예: 4학년 1반)만 쓰고 만들기를 누르세요. <button class="btn small ghost" style="min-height:28px;font-size:12px" onclick="store.del('rally.invite');S.src={source:'template',template:''};renderMine()">초대 무시</button></div>` : ''}
     ${cards || '<div class="msg">아직 만든 행사가 없어요. 아래에서 첫 행사를 만들어 보세요.</div>'}
     <div class="ticket">
@@ -484,7 +484,14 @@ async function renderMine(highlight = '') {
       <button class="btn sun block" id="newBtn" onclick="createEventFromApp()">새 행사 만들기</button>
       <p style="margin:10px 0 0;font-size:14px;color:var(--ink-2)">선생님 드라이브에 미션 시트와 사진 폴더가 생기고, 행사 코드와 비밀번호가 나와요.</p>
     </div>
-    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="leaveEvent()">처음 화면으로</button></p>`;
+    <p class="foot">${esc(COPYRIGHT)}<br><button onclick="teacherLogout()">다른 계정으로 로그인 (로그아웃)</button> · <button onclick="leaveEvent()">처음 화면으로</button></p>`;
+}
+function teacherLogout() {
+  if (!confirm('이 기기에서 선생님 로그인을 지울까요?\n행사와 기록은 그대로 남고, 다시 Google로 시작하기를 누르면 됩니다.')) return;
+  store.del('rally.sid'); store.del('rally.invite');
+  try { Object.keys(sessionStorage).filter(k => k.startsWith('rally.pw.')).forEach(k => sessionStorage.removeItem(k)); } catch (e) {}
+  S.teacherPw = ''; S.src = { source: 'template', template: '' };
+  toast('로그아웃했어요'); renderStart();
 }
 S.src = { source: 'template', template: '' };
 function applyInvite() {
@@ -576,6 +583,7 @@ function renderStart(err = '') {
       <p style="margin:6px 0 10px;color:var(--ink-2);font-size:15px">Google 계정으로 로그인하면 <b>내 행사 목록</b>(행사 코드·비밀번호·현황판)이 나오고, 거기서 <b>새 행사</b>도 만들 수 있어요. 학생 기록과 사진은 모두 선생님 드라이브에 저장됩니다.</p>
       <p style="margin:0 0 10px;font-size:13px;color:var(--ink-2)">행사 코드·제목과 로그인 계정은 이 앱 운영자(영쌤클래스)의 관리 시트에 기록돼요. 학생 기록·사진은 기록되지 않으며, 구글 계정 → 보안 → 서드파티 앱에서 언제든 연결을 끊을 수 있어요.</p>
       <button class="btn block" id="gBtn">Google로 시작하기</button>
+      ${store.get('rally.sid') ? `<p style="margin:10px 0 0;font-size:13px;color:var(--ink-2)">이 기기에 로그인이 남아 있어요. 다른 계정으로 하려면 <button class="btn small ghost" style="min-height:26px;font-size:12px;padding:0 8px" onclick="teacherLogout()">로그아웃</button> 후 시작하세요.</p>` : ''}
     </div>
     <p class="foot">${esc(COPYRIGHT)}</p>`;
   $('#evBtn').onclick = () => {
@@ -1001,6 +1009,7 @@ function renderTeacher() {
       <button class="btn small ghost" onclick="openReplace()">미션 세트 바꾸기</button>
       <button class="btn small ghost" onclick="backToStudent()">학생 화면</button>
       <button class="btn small ghost" onclick="goMine()">내 행사</button>
+      <button class="btn small ghost" onclick="teacherLogout()">로그아웃</button>
       ${d.closed ? `<button class="btn small" onclick="toggleEvent(true)">다시 열기</button>` : `<button class="btn small ghost" style="border-color:var(--coral);color:var(--coral)" onclick="toggleEvent(false)">행사 종료</button>`}</div>
     ${d.closed ? '<div class="banner">행사가 종료됐어요. 학생 제출과 게시판이 닫히고 사진 공개 링크가 회수됐어요. (선생님 화면에서는 로그인한 구글 계정으로만 사진이 보여요)</div>' : ''}
     ${d.deadlines && d.deadlines.length ? `<p class="live no-print" style="margin:-6px 0 8px">⏰ 마감: ${d.deadlines.map(x => esc(x.time + ' ' + x.label)).join(' · ')}</p>` : ''}
