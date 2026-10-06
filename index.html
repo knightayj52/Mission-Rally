@@ -996,7 +996,10 @@ function renderTeacher() {
       · <button class="btn small ghost" style="min-height:30px;font-size:13px" onclick="copyInvite()">동료 초대 링크 복사</button></p>
     <div class="grid-wrap"><table class="grid"><thead><tr><th>모둠</th>${ms.map((m, i) => `<th title="${esc(m.title)}">${i + 1}</th>`).join('')}<th>완료</th><th>점수</th><th>마지막 활동</th></tr></thead>
       <tbody>${d.leaderboard.map(r => `<tr><td>${esc(r.team)}</td>${ms.map(m => `<td>${cellOf(r.team, m.id)}</td>`).join('')}<td>${r.done}/${ms.length}</td><td class="total">${r.points}</td><td>${lastAct(d.lastActivity && d.lastActivity[r.team])}</td></tr>`).join('')}</tbody></table></div>
-    <p class="live" style="margin:8px 0 0">${ms.map((m, i) => `${i + 1} ${esc(m.title)}`).join(' · ')}</p>
+    <details class="no-print" style="margin:8px 0 0"><summary class="live" style="cursor:pointer">${ms.map((m, i) => `${i + 1} ${esc(m.title)}`).join(' · ')} — <b>정답·교사참고 보기</b></summary>
+      <div style="display:grid;gap:6px;margin:8px 0 0">${ms.map((m, i) => `<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px">
+        <b>${i + 1}. ${esc(m.title)}</b> <span class="live">${esc(TYPE_LABEL[m.type] || m.type)}${m.place ? ' · ' + esc(m.place) : ''} · ${m.points}점${m.code ? ' · 장소코드 ' + esc(m.code) : ''}</span>
+        ${m.answer ? `<div>정답: <b>${esc(m.answer)}</b></div>` : ''}${m.note ? `<div style="color:var(--ink-2);white-space:pre-wrap">${esc(m.note)}</div>` : ''}</div>`).join('')}</div></details>
     ${contestRows ? `<div class="queue"><h2>사진 공모전 심사</h2>${contestRows}</div>` : ''}
     <div class="queue"><h2>검토 대기 ${pending.length}건</h2>
       ${pending.length ? pending.map(s => card(s, true)).join('') : '<div class="msg">지금은 확인할 제출이 없어요.</div>'}</div>
