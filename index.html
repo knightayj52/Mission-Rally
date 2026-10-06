@@ -598,6 +598,8 @@ async function startGoogle() {
   const btn = $('#gBtn'); if (btn) { btn.disabled = true; btn.textContent = '준비 중…'; }
   try {
     const r = await api({ action: 'auth_url', appUrl: location.origin + location.pathname });
+    if (!r || typeof r.url !== 'string' || !/^https:\/\/accounts\.google\.com\//.test(r.url))
+      throw new Error('로그인 주소를 받지 못했어요. 서버 배포가 최신 버전인지 확인하세요. (응답: ' + JSON.stringify(r).slice(0, 160) + ')');
     location.href = r.url;
   } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Google로 시작하기'; } toast(e.message); }
 }
